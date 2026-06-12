@@ -26,12 +26,12 @@ body {
     "Microsoft YaHei", sans-serif;
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
 .app {
-  height: 100vh;
+  height: 100dvh;
   padding: 16px 24px;
   overflow: hidden;
 }
