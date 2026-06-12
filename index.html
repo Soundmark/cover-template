@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小红书封面生成器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <!-- 空状态:还没上传模板 -->
+    <section id="empty-state" class="empty-state" hidden>
+      <h1>小红书封面生成器</h1>
+      <p>先上传一张 PSD 导出的 PNG 模板,程序会记住它,以后只改标题和主图。</p>
+      <label class="btn primary">
+        上传模板
+        <input id="template-input" type="file" accept="image/png" hidden />
+      </label>
+      <p class="hint">建议尺寸 1080×1440,文件大小 < 1MB</p>
+    </section>
+
+    <!-- 正常态:已上传模板,显示表单 + 预览 -->
+    <section id="workspace" class="workspace" hidden>
+      <header class="workspace-header">
+        <h1>小红书封面生成器</h1>
+        <div class="header-actions">
+          <button id="reupload-btn" class="btn small">🔄 换模板</button>
+        </div>
+      </header>
+
+      <div class="workspace-body">
+        <div class="preview-panel">
+          <canvas id="preview"></canvas>
+        </div>
+
+        <aside class="form-panel">
+          <fieldset class="group">
+            <legend>标题</legend>
+            <div class="field">
+              <label for="title-input">大标题</label>
+              <textarea id="title-input" rows="3" placeholder="输入今天的标题…"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="title-font-size">字号</label>
+                <input id="title-font-size" type="number" min="12" max="200" />
+              </div>
+              <div class="field">
+                <label for="title-color">字色</label>
+                <input id="title-color" type="color" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="title-y">Y 位置<span class="hint-inline">(X 自动居中)</span></label>
+              <input id="title-y" type="number" />
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>主图</legend>
+            <div class="field">
+              <label for="main-image-input">主图文件</label>
+              <input id="main-image-input" type="file" accept="image/*" />
+            </div>
+            <div class="field">
+              <label for="main-image-y">Y 位置<span class="hint-inline">(X 自动居中)</span></label>
+              <input id="main-image-y" type="number" />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="main-image-w">宽</label>
+                <input id="main-image-w" type="number" min="1" />
+              </div>
+              <div class="field">
+                <label for="main-image-h">高</label>
+                <input id="main-image-h" type="number" min="1" />
+              </div>
+            </div>
+            <p class="hint">宽高按纵横比联动 · 上传新图会弹裁剪</p>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>画布</legend>
+            <div class="field-row">
+              <div class="field">
+                <label for="canvas-w">画布宽</label>
+                <input id="canvas-w" type="number" min="100" />
+              </div>
+              <div class="field">
+                <label for="canvas-h">画布高</label>
+                <input id="canvas-h" type="number" min="100" />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>难度评级</legend>
+            <div class="field">
+              <label for="star-image-input">星星贴图</label>
+              <input id="star-image-input" type="file" accept="image/*" />
+            </div>
+            <div class="field">
+              <label for="star-count">星星数量</label>
+              <select id="star-count">
+                <option value="0">不显示</option>
+                <option value="1">1 星</option>
+                <option value="2">2 星</option>
+                <option value="3">3 星</option>
+                <option value="4">4 星</option>
+                <option value="5">5 星</option>
+                <option value="6">6 星</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="star-size">尺寸</label>
+                <input id="star-size" type="number" min="10" max="500" />
+              </div>
+              <div class="field">
+                <label for="star-spacing">间隔</label>
+                <input id="star-spacing" type="number" min="0" max="200" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="star-x">X 位置</label>
+                <input id="star-x" type="number" />
+              </div>
+              <div class="field">
+                <label for="star-y">Y 位置</label>
+                <input id="star-y" type="number" />
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="actions">
+            <button id="reset-btn" class="btn">↺ 重置</button>
+            <button id="download-btn" class="btn primary">⬇ 下载 PNG</button>
+          </div>
+
+          <button id="clear-btn" class="btn link danger">清空所有数据(模板和配置)</button>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- 裁剪弹窗 -->
+  <div id="crop-modal" class="modal" hidden>
+    <div class="modal-content crop-modal-content">
+      <h2>裁剪主图</h2>
+      <p class="hint">拖动角和边调整裁剪框,框内可整体拖动。</p>
+
+      <div class="crop-stage" id="crop-stage">
+        <canvas id="crop-canvas"></canvas>
+        <div class="crop-overlay">
+          <div class="crop-mask top"></div>
+          <div class="crop-mask bottom"></div>
+          <div class="crop-mask left"></div>
+          <div class="crop-mask right"></div>
+          <div class="crop-rect" id="crop-rect">
+            <div class="handle nw" data-handle="nw"></div>
+            <div class="handle n" data-handle="n"></div>
+            <div class="handle ne" data-handle="ne"></div>
+            <div class="handle e" data-handle="e"></div>
+            <div class="handle se" data-handle="se"></div>
+            <div class="handle s" data-handle="s"></div>
+            <div class="handle sw" data-handle="sw"></div>
+            <div class="handle w" data-handle="w"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="crop-w">裁剪宽</label>
+          <input id="crop-w" type="number" min="1" />
+        </div>
+        <div class="field">
+          <label for="crop-h">裁剪高</label>
+          <input id="crop-h" type="number" min="1" />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="crop-cancel" class="btn">取消</button>
+        <button id="crop-confirm" class="btn primary">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示横幅 -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
