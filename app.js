@@ -459,29 +459,12 @@ function onCropMouseMove(e) {
     w = start.w;
     h = start.h;
   } else {
-    // 角/边:约束纵横比,以对边为锚点
+    // 角/边:自由调整，不约束纵横比
     let nw = start.w, nh = start.h, nx = start.x, ny = start.y;
     if (cropDrag.type.includes("e")) nw = start.w + dx;
     if (cropDrag.type.includes("w")) { nw = start.w - dx; nx = start.x + dx; }
     if (cropDrag.type.includes("s")) nh = start.h + dy;
     if (cropDrag.type.includes("n")) { nh = start.h - dy; ny = start.y + dy; }
-    // 纵横比约束:以已计算维度为准,联动另一维度
-    if (cropDrag.type === "n" || cropDrag.type === "s") {
-      // 上下边:锁定宽度(nw),调整高度
-      nh = nw / ratio;
-      if (cropDrag.type === "n") ny = start.y + (start.h - nh);
-    } else if (cropDrag.type === "e" || cropDrag.type === "w") {
-      // 左右边:锁定高度(nh),调整宽度
-      nw = nh * ratio;
-    } else {
-      // 角拖动:以拖动增加量较大的维度为准
-      const ratioDiff = Math.abs(nw / start.w - 1) - Math.abs(nh / start.h - 1);
-      if (ratioDiff >= 0) {
-        nh = nw / ratio;
-      } else {
-        nw = nh * ratio;
-      }
-    }
     nw = Math.max(1, nw);
     nh = Math.max(1, nh);
     x = nx; y = ny; w = nw; h = nh;
@@ -502,15 +485,94 @@ function onCropMouseMove(e) {
 function onCropMouseUp() {
   cropDrag = null;
 }
+
+// 移动端触摸事件处理
+function onCropTouchStart(e) {
+  if (e.touches.length !== 1) return;
+  const touch = e.touches[0];
+  // 使用 document.elementFromPoint 获取触摸位置下的元素
+  const target = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (!target) return;
+
+  const handle = target.closest(".handle");
+  const cropRect = target.closest(".crop-rect");
+
+  if (!handle && !cropRect) return;
+
+  e.preventDefault();
+  const stageRect = els.cropStage.getBoundingClientRect();
+  const s = cropState.scale;
+  cropDrag = {
+    type: handle ? handle.dataset.handle : "move",
+    startMouse: { x: (touch.clientX - stageRect.left) / s, y: (touch.clientY - stageRect.top) / s },
+    startRect: { ...cropState.rect },
+  };
+}
+
+function onCropTouchMove(e) {
+  if (!cropDrag || e.touches.length !== 1) return;
+  const touch = e.touches[0];
+  e.preventDefault();
+  const stageRect = els.cropStage.getBoundingClientRect();
+  const s = cropState.scale;
+  const cur = { x: (touch.clientX - stageRect.left) / s, y: (touch.clientY - stageRect.top) / s };
+  const dx = cur.x - cropDrag.startMouse.x;
+  const dy = cur.y - cropDrag.startMouse.y;
+  const start = cropDrag.startRect;
+  const ratio = cropState.aspectRatio;
+  let x, y, w, h;
+
+  if (cropDrag.type === "move") {
+    x = start.x + dx;
+    y = start.y + dy;
+    w = start.w;
+    h = start.h;
+  } else {
+    // 角/边:自由调整，不约束纵横比
+    let nw = start.w, nh = start.h, nx = start.x, ny = start.y;
+    if (cropDrag.type.includes("e")) nw = start.w + dx;
+    if (cropDrag.type.includes("w")) { nw = start.w - dx; nx = start.x + dx; }
+    if (cropDrag.type.includes("s")) nh = start.h + dy;
+    if (cropDrag.type.includes("n")) { nh = start.h - dy; ny = start.y + dy; }
+    nw = Math.max(1, nw);
+    nh = Math.max(1, nh);
+    x = nx; y = ny; w = nw; h = nh;
+  }
+
+  // 限制在原图范围内
+  if (x < 0) { w += x; x = 0; }
+  if (y < 0) { h += y; y = 0; }
+  if (x + w > cropState.rawWidth) w = cropState.rawWidth - x;
+  if (y + h > cropState.rawHeight) h = cropState.rawHeight - y;
+  w = Math.max(1, w);
+  h = Math.max(1, h);
+
+  cropState.rect = { x, y, w, h };
+  layoutCropRect();
+  syncCropRectToUI();
+}
+
+function onCropTouchEnd() {
+  onCropMouseUp();
+}
+
 function bindCropEvents() {
   els.cropStage.addEventListener("mousedown", onCropMouseDown);
   window.addEventListener("mousemove", onCropMouseMove);
   window.addEventListener("mouseup", onCropMouseUp);
+  // 移动端触摸事件
+  els.cropStage.addEventListener("touchstart", onCropTouchStart, { passive: false });
+  window.addEventListener("touchmove", onCropTouchMove, { passive: false });
+  window.addEventListener("touchend", onCropTouchEnd);
 }
 function unbindCropEvents() {
   els.cropStage.removeEventListener("mousedown", onCropMouseDown);
   window.removeEventListener("mousemove", onCropMouseMove);
   window.removeEventListener("mouseup", onCropMouseUp);
+  // 移动端触摸事件
+  els.cropStage.removeEventListener("touchstart", onCropTouchStart);
+  window.removeEventListener("touchmove", onCropTouchMove);
+  window.removeEventListener("touchend", onCropTouchEnd);
 }
 
 async function confirmCrop() {
