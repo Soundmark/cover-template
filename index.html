@@ -13,9 +13,101 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- Tab 导航 -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="cover">封面制作</button>
+    <button class="tab-btn" data-tab="blueprint">图纸尺寸识别</button>
+  </nav>
+
+  <!-- 图纸尺寸识别工作区 -->
+  <section id="blueprint-workspace" class="blueprint-workspace" hidden>
+    <div class="bp-container">
+      <!-- 步骤指示器 -->
+      <div class="bp-steps">
+        <div class="bp-step active" data-step="1">
+          <span class="bp-step-num">1</span>
+          <span class="bp-step-label">导入图片</span>
+        </div>
+        <div class="bp-step" data-step="2">
+          <span class="bp-step-num">2</span>
+          <span class="bp-step-label">裁剪图纸</span>
+        </div>
+        <div class="bp-step" data-step="3">
+          <span class="bp-step-num">3</span>
+          <span class="bp-step-label">选择格子</span>
+        </div>
+        <div class="bp-step" data-step="4">
+          <span class="bp-step-num">4</span>
+          <span class="bp-step-label">结果</span>
+        </div>
+      </div>
+
+      <!-- 主内容区 -->
+      <div class="bp-main">
+        <!-- 图片预览区 -->
+        <div class="bp-preview-panel">
+          <div class="bp-upload-zone" id="bp-upload-zone">
+            <p>点击或拖拽上传图片</p>
+            <input id="bp-image-input" type="file" accept="image/*" hidden />
+          </div>
+          <div class="bp-canvas-container" id="bp-canvas-container" hidden>
+            <div class="bp-canvas-wrapper" id="bp-canvas-wrapper">
+              <canvas id="bp-canvas"></canvas>
+              <div class="bp-overlay" id="bp-overlay">
+                <!-- 裁剪框 -->
+                <div class="bp-crop-box" id="bp-crop-box" hidden></div>
+                <!-- 格子框 -->
+                <div class="bp-grid-box" id="bp-grid-box" hidden></div>
+              </div>
+            </div>
+            <!-- 缩放控制 -->
+            <div class="bp-zoom-controls" id="bp-zoom-controls" hidden>
+              <button class="bp-zoom-btn" id="bp-zoom-out">−</button>
+              <span class="bp-zoom-level" id="bp-zoom-level">100%</span>
+              <button class="bp-zoom-btn" id="bp-zoom-in">+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作面板 -->
+        <div class="bp-actions-panel">
+          <!-- 步骤1: 导入后显示裁剪按钮 -->
+          <div class="bp-action-step" id="bp-action-step1" hidden>
+            <button class="btn primary" id="bp-start-crop">开始裁剪图纸区域</button>
+            <button class="btn" id="bp-reset-image">重新选择图片</button>
+          </div>
+
+          <!-- 步骤2: 裁剪确认 -->
+          <div class="bp-action-step" id="bp-action-step2" hidden>
+            <p class="hint">拖动裁剪框选择图纸区域</p>
+            <button class="btn primary" id="bp-confirm-crop">确认裁剪</button>
+            <button class="btn" id="bp-cancel-crop">取消</button>
+          </div>
+
+          <!-- 步骤3: 选择格子 -->
+          <div class="bp-action-step" id="bp-action-step3" hidden>
+            <p class="hint">在裁剪区域内拖动选择一个最小格子</p>
+            <button class="btn primary" id="bp-confirm-grid">确认格子</button>
+            <button class="btn" id="bp-redo-crop">重新裁剪</button>
+          </div>
+
+          <!-- 步骤4: 结果展示 -->
+          <div class="bp-action-step" id="bp-action-step4" hidden>
+            <div class="bp-result">
+              <h3>图纸尺寸</h3>
+              <div class="bp-result-value" id="bp-result-value">— × —</div>
+              <p class="hint">宽 × 高 (格子数量)</p>
+            </div>
+            <button class="btn" id="bp-restart">重新开始</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <main class="app">
     <!-- 空状态:还没上传模板 -->
-    <section id="empty-state" class="empty-state" hidden>
+    <section id="empty-state" class="empty-state" data-tab-content="cover" hidden>
       <h1>小红书封面生成器</h1>
       <p>先上传一张 PSD 导出的 PNG 模板,程序会记住它,以后只改标题和主图。</p>
       <label class="btn primary">
@@ -26,7 +118,7 @@
     </section>
 
     <!-- 正常态:已上传模板,显示表单 + 预览 -->
-    <section id="workspace" class="workspace" hidden>
+    <section id="workspace" class="workspace" data-tab-content="cover" hidden>
       <header class="workspace-header">
         <h1>小红书封面生成器</h1>
         <div class="header-actions">
@@ -197,6 +289,7 @@
   <!-- 提示横幅 -->
   <div id="toast" class="toast" hidden></div>
 
+  <script src="blueprint.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
