@@ -99,18 +99,13 @@ const BlueprintApp = (() => {
       btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
 
+    // 处理封面制作 tab 内容
     els.tabContents.forEach(content => {
       content.hidden = content.dataset.tabContent !== tabName;
     });
 
-    // 显示/隐藏空状态和工作区
-    if (tabName === 'cover') {
-      if (els.workspace.hidden && els.emptyState.hidden) {
-        els.emptyState.hidden = false;
-      }
-    } else {
-      els.blueprintWorkspace.hidden = false;
-    }
+    // 处理 blueprint 工作区
+    els.blueprintWorkspace.hidden = tabName !== 'blueprint';
   }
 
   function setStep(step) {
@@ -154,6 +149,10 @@ const BlueprintApp = (() => {
       els.uploadZone.hidden = true;
       els.canvasContainer.hidden = false;
       els.zoomControls.hidden = false;
+
+      // 初始化并显示裁剪框
+      initCropBox();
+      els.cropBox.hidden = false;
 
       setStep(2);
     } catch (e) {

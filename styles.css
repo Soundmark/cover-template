@@ -811,6 +811,6 @@ body {
   }
 
   .bp-step-label {
-    display: none;
+    font-size: 11px;
   }
 }
