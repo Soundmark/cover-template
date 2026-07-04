@@ -192,43 +192,90 @@
           </fieldset>
 
           <fieldset class="group">
-            <legend>难度评级</legend>
+            <legend>图纸尺寸</legend>
             <div class="field">
-              <label for="star-image-input">星星贴图</label>
-              <input id="star-image-input" type="file" accept="image/*" />
-            </div>
-            <div class="field">
-              <label for="star-count">星星数量</label>
-              <select id="star-count">
-                <option value="0">不显示</option>
-                <option value="1">1 星</option>
-                <option value="2">2 星</option>
-                <option value="3">3 星</option>
-                <option value="4">4 星</option>
-                <option value="5">5 星</option>
-                <option value="6">6 星</option>
-              </select>
+              <label for="blueprint-text-input">文字内容</label>
+              <textarea id="blueprint-text-input" rows="2" placeholder="A3 297×420"></textarea>
             </div>
             <div class="field-row">
               <div class="field">
-                <label for="star-size">尺寸</label>
-                <input id="star-size" type="number" min="10" max="500" />
+                <label for="blueprint-x">X 位置</label>
+                <input id="blueprint-x" type="number" />
               </div>
               <div class="field">
-                <label for="star-spacing">间隔</label>
-                <input id="star-spacing" type="number" min="0" max="200" />
+                <label for="blueprint-y">Y 位置</label>
+                <input id="blueprint-y" type="number" />
               </div>
+            </div>
+            <div class="field">
+              <label for="blueprint-color">字色</label>
+              <input id="blueprint-color" type="text" placeholder="#FFFFFF" />
+            </div>
+            <div class="field">
+              <label for="blueprint-font-size">字号</label>
+              <input id="blueprint-font-size" type="number" min="8" max="200" />
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>标签</legend>
+            <div class="field">
+              <label for="tags-text-input">标签文字<span class="hint-inline">(用顿号隔开)</span></label>
+              <textarea id="tags-text-input" rows="2" placeholder="入门、基础、进阶"></textarea>
             </div>
             <div class="field-row">
               <div class="field">
-                <label for="star-x">X 位置</label>
-                <input id="star-x" type="number" />
+                <label for="tags-x">X 位置</label>
+                <input id="tags-x" type="number" />
               </div>
               <div class="field">
-                <label for="star-y">Y 位置</label>
-                <input id="star-y" type="number" />
+                <label for="tags-y">Y 位置</label>
+                <input id="tags-y" type="number" />
               </div>
             </div>
+            <div class="field">
+              <label for="tags-color">字色</label>
+              <input id="tags-color" type="text" placeholder="#FFFFFF" />
+            </div>
+            <div class="field">
+              <label for="tags-font-size">字号</label>
+              <input id="tags-font-size" type="number" min="8" max="200" />
+            </div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>宣传语</legend>
+            <div class="field">
+              <label for="slogan-text">当前文字</label>
+              <textarea id="slogan-text" rows="2" placeholder="选自下方预设，或直接输入"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="slogan-x">X 位置</label>
+                <input id="slogan-x" type="number" />
+              </div>
+              <div class="field">
+                <label for="slogan-y">Y 位置</label>
+                <input id="slogan-y" type="number" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="slogan-color">字色</label>
+              <input id="slogan-color" type="text" placeholder="#FFFFFF" />
+            </div>
+            <div class="field">
+              <label for="slogan-font-size">字号</label>
+              <input id="slogan-font-size" type="number" min="8" max="200" />
+            </div>
+            <div class="field">
+              <label>预设列表</label>
+              <div id="slogan-presets" class="preset-list"></div>
+            </div>
+            <div class="field-row">
+              <input id="slogan-preset-input" type="text" placeholder="新预设内容" />
+              <button id="slogan-add-preset-btn" class="btn small">添加</button>
+            </div>
+            <button id="slogan-random-btn" class="btn small">随机抽取</button>
           </fieldset>
 
           <div class="actions">

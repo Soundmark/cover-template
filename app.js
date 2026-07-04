@@ -18,13 +18,25 @@ const DEFAULT_STATE = {
   titleY: 1180,
   titleFontSize: 72,
   titleColor: "#FFFFFF",
-  // 星星难度评级
-  starCount: 0,
-  starSize: 50,
-  starSpacing: 10,
-  starX: 540,
-  starY: 100,
-  starImageDataUrl: null,
+  // 图纸尺寸
+  blueprintText: "",
+  blueprintX: 540,
+  blueprintY: 60,
+  blueprintColor: "#FFFFFF",
+  blueprintFontSize: 36,
+  // 标签
+  tags: "",
+  tagsX: 540,
+  tagsY: 100,
+  tagsColor: "#FFFFFF",
+  tagsFontSize: 28,
+  // 宣传语
+  slogan: "",
+  sloganX: 540,
+  sloganY: 200,
+  sloganColor: "#FFFFFF",
+  sloganFontSize: 48,
+  sloganPresets: [],
 };
 
 const FONT_STACK =
@@ -33,7 +45,6 @@ const FONT_STACK =
 const state = {
   templateImage: null,
   mainImage: null, // 裁剪后的 HTMLImageElement
-  starImage: null, // 星星贴图
   ...DEFAULT_STATE,
 };
 
@@ -70,13 +81,28 @@ const els = {
   downloadBtn: $("download-btn"),
   clearBtn: $("clear-btn"),
   canvas: $("preview"),
-  // 星星
-  starImageInput: $("star-image-input"),
-  starCount: $("star-count"),
-  starSize: $("star-size"),
-  starSpacing: $("star-spacing"),
-  starX: $("star-x"),
-  starY: $("star-y"),
+  // 图纸尺寸
+  blueprintTextInput: $("blueprint-text-input"),
+  blueprintX: $("blueprint-x"),
+  blueprintY: $("blueprint-y"),
+  blueprintColor: $("blueprint-color"),
+  blueprintFontSize: $("blueprint-font-size"),
+  // 标签
+  tagsTextInput: $("tags-text-input"),
+  tagsX: $("tags-x"),
+  tagsY: $("tags-y"),
+  tagsColor: $("tags-color"),
+  tagsFontSize: $("tags-font-size"),
+  // 宣传语
+  sloganText: $("slogan-text"),
+  sloganX: $("slogan-x"),
+  sloganY: $("slogan-y"),
+  sloganColor: $("slogan-color"),
+  sloganFontSize: $("slogan-font-size"),
+  sloganPresets: $("slogan-presets"),
+  sloganPresetInput: $("slogan-preset-input"),
+  sloganAddPresetBtn: $("slogan-add-preset-btn"),
+  sloganRandomBtn: $("slogan-random-btn"),
   // 裁剪
   cropModal: $("crop-modal"),
   cropCanvas: $("crop-canvas"),
@@ -120,7 +146,6 @@ function saveState() {
       const persist = { ...state };
       delete persist.templateImage;
       delete persist.mainImage;
-      delete persist.starImage;
       localStorage.setItem(LS_STATE, JSON.stringify(persist));
     } catch (e) {
       toast("保存失败,可能是存储已满", true);
@@ -133,7 +158,6 @@ function saveStateNow() {
     const persist = { ...state };
     delete persist.templateImage;
     delete persist.mainImage;
-    delete persist.starImage;
     localStorage.setItem(LS_STATE, JSON.stringify(persist));
   } catch (e) {
     toast("保存失败,可能是存储已满", true);
@@ -224,14 +248,6 @@ function drawCenteredText(ctx, text, opts) {
   ctx.restore();
 }
 
-function drawStars(ctx, count, x, y, size, spacing, img) {
-  if (!count || !img) return;
-  for (let i = 0; i < count; i++) {
-    const sx = x + i * (size + spacing);
-    ctx.drawImage(img, sx, y, size, size);
-  }
-}
-
 function render() {
   if (!state.templateImage) return;
   const cw = Number(state.canvasWidth) || 1080;
@@ -262,14 +278,43 @@ function render() {
     color: state.titleColor || "#FFFFFF",
   });
 
-  // 星星难度评级
-  const starCount = Number(state.starCount) || 0;
-  if (state.starImage && starCount > 0) {
-    const starX = Number(state.starX) || 0;
-    const starY = Number(state.starY) || 0;
-    const starSize = Number(state.starSize) || 50;
-    const starSpacing = Number(state.starSpacing) || 10;
-    drawStars(ctx, starCount, starX, starY, starSize, starSpacing, state.starImage);
+  // 图纸尺寸文字
+  if (state.blueprintText) {
+    const bpX = Number(state.blueprintX) || cw / 2;
+    const bpY = Number(state.blueprintY) || 60;
+    drawCenteredText(ctx, state.blueprintText, {
+      x: bpX,
+      y: bpY,
+      maxWidth: Math.max(200, cw - 80),
+      fontSize: Number(state.blueprintFontSize) || 36,
+      color: state.blueprintColor || "#FFFFFF",
+    });
+  }
+
+  // 标签文字
+  if (state.tags) {
+    const tagsX = Number(state.tagsX) || cw / 2;
+    const tagsY = Number(state.tagsY) || 100;
+    drawCenteredText(ctx, state.tags, {
+      x: tagsX,
+      y: tagsY,
+      maxWidth: Math.max(200, cw - 80),
+      fontSize: Number(state.tagsFontSize) || 28,
+      color: state.tagsColor || "#FFFFFF",
+    });
+  }
+
+  // 宣传语
+  if (state.slogan) {
+    const sloganX = Number(state.sloganX) || cw / 2;
+    const sloganY = Number(state.sloganY) || 200;
+    drawCenteredText(ctx, state.slogan, {
+      x: sloganX,
+      y: sloganY,
+      maxWidth: Math.max(200, cw - 80),
+      fontSize: Number(state.sloganFontSize) || 48,
+      color: state.sloganColor || "#FFFFFF",
+    });
   }
 }
 
@@ -284,12 +329,25 @@ function syncStateToUI() {
   els.mainImageH.value = state.mainImageHeight;
   els.canvasW.value = state.canvasWidth;
   els.canvasH.value = state.canvasHeight;
-  // 星星
-  els.starCount.value = state.starCount;
-  els.starSize.value = state.starSize;
-  els.starSpacing.value = state.starSpacing;
-  els.starX.value = state.starX;
-  els.starY.value = state.starY;
+  // 图纸尺寸
+  els.blueprintTextInput.value = state.blueprintText || "";
+  els.blueprintX.value = state.blueprintX;
+  els.blueprintY.value = state.blueprintY;
+  els.blueprintColor.value = state.blueprintColor;
+  els.blueprintFontSize.value = state.blueprintFontSize;
+  // 标签
+  els.tagsTextInput.value = state.tags || "";
+  els.tagsX.value = state.tagsX;
+  els.tagsY.value = state.tagsY;
+  els.tagsColor.value = state.tagsColor;
+  els.tagsFontSize.value = state.tagsFontSize;
+  // 宣传语
+  els.sloganText.value = state.slogan || "";
+  els.sloganX.value = state.sloganX;
+  els.sloganY.value = state.sloganY;
+  els.sloganColor.value = state.sloganColor;
+  els.sloganFontSize.value = state.sloganFontSize;
+  renderSloganPresets();
 }
 function showEmpty() {
   els.emptyState.hidden = false;
@@ -298,6 +356,40 @@ function showEmpty() {
 function showWorkspace() {
   els.emptyState.hidden = true;
   els.workspace.hidden = false;
+}
+
+// ============== 预设列表渲染 ==============
+function renderSloganPresets() {
+  const container = els.sloganPresets;
+  container.innerHTML = "";
+  state.sloganPresets.forEach((text, i) => {
+    const chip = document.createElement("div");
+    chip.className = "preset-chip";
+    if (text === state.slogan) chip.classList.add("active");
+    chip.textContent = text;
+    chip.title = "点击设为当前值";
+    chip.addEventListener("click", () => {
+      state.slogan = text;
+      els.sloganText.value = text;
+      renderSloganPresets();
+      render();
+    });
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "preset-chip-remove";
+    removeBtn.textContent = "×";
+    removeBtn.title = "删除此预设";
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.sloganPresets.splice(i, 1);
+      if (state.slogan === text) state.slogan = "";
+      saveStateNow();
+      renderSloganPresets();
+      syncStateToUI();
+      render();
+    });
+    chip.appendChild(removeBtn);
+    container.appendChild(chip);
+  });
 }
 
 // ============== 实时更新 ==============
@@ -634,13 +726,6 @@ async function bootstrap() {
       state.mainImage = null;
     }
   }
-  if (state.starImageDataUrl) {
-    try {
-      state.starImage = await loadImage(state.starImageDataUrl);
-    } catch {
-      state.starImage = null;
-    }
-  }
   syncStateToUI();
   showWorkspace();
   await document.fonts.ready;
@@ -685,22 +770,6 @@ async function handleMainImageUpload(e) {
     return;
   }
   openCropModal();
-  e.target.value = "";
-}
-
-async function handleStarImageUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const dataUrl = await fileToDataURL(file);
-    state.starImageDataUrl = dataUrl;
-    state.starImage = await loadImage(dataUrl);
-    saveStateNow();
-    render();
-    toast("星星贴图已加载");
-  } catch {
-    toast("星星贴图加载失败", true);
-  }
   e.target.value = "";
 }
 
@@ -752,15 +821,55 @@ function bindEvents() {
     void handleMainImageUpload(e);
   });
 
-  // 星星
-  els.starImageInput.addEventListener("change", (e) => {
-    void handleStarImageUpload(e);
+  // 图纸尺寸
+  els.blueprintTextInput.addEventListener("input", (e) => updateField("blueprintText", e.target.value));
+  els.blueprintX.addEventListener("input", (e) => updateField("blueprintX", Number(e.target.value) || 0));
+  els.blueprintY.addEventListener("input", (e) => updateField("blueprintY", Number(e.target.value) || 0));
+  els.blueprintColor.addEventListener("input", (e) => updateField("blueprintColor", e.target.value));
+  els.blueprintFontSize.addEventListener("input", (e) => updateField("blueprintFontSize", Math.max(8, Number(e.target.value) || 36)));
+
+  // 标签
+  els.tagsTextInput.addEventListener("input", (e) => updateField("tags", e.target.value));
+  els.tagsX.addEventListener("input", (e) => updateField("tagsX", Number(e.target.value) || 0));
+  els.tagsY.addEventListener("input", (e) => updateField("tagsY", Number(e.target.value) || 0));
+  els.tagsColor.addEventListener("input", (e) => updateField("tagsColor", e.target.value));
+  els.tagsFontSize.addEventListener("input", (e) => updateField("tagsFontSize", Math.max(8, Number(e.target.value) || 28)));
+
+  // 宣传语
+  els.sloganText.addEventListener("input", (e) => updateField("slogan", e.target.value));
+  els.sloganX.addEventListener("input", (e) => updateField("sloganX", Number(e.target.value) || 0));
+  els.sloganY.addEventListener("input", (e) => updateField("sloganY", Number(e.target.value) || 0));
+  els.sloganColor.addEventListener("input", (e) => updateField("sloganColor", e.target.value));
+  els.sloganFontSize.addEventListener("input", (e) => updateField("sloganFontSize", Math.max(8, Number(e.target.value) || 48)));
+
+  // 宣传语预设
+  els.sloganAddPresetBtn.addEventListener("click", () => {
+    const text = els.sloganPresetInput.value.trim();
+    if (!text) return;
+    state.sloganPresets.push(text);
+    state.slogan = text;
+    els.sloganPresetInput.value = "";
+    saveStateNow();
+    renderSloganPresets();
+    syncStateToUI();
+    render();
   });
-  els.starCount.addEventListener("change", (e) => updateField("starCount", Number(e.target.value) || 0));
-  els.starSize.addEventListener("input", (e) => updateField("starSize", Math.max(10, Number(e.target.value) || 50)));
-  els.starSpacing.addEventListener("input", (e) => updateField("starSpacing", Math.max(0, Number(e.target.value) || 0)));
-  els.starX.addEventListener("input", (e) => updateField("starX", Number(e.target.value) || 0));
-  els.starY.addEventListener("input", (e) => updateField("starY", Number(e.target.value) || 0));
+
+  els.sloganRandomBtn.addEventListener("click", () => {
+    if (!state.sloganPresets.length) return;
+    const idx = Math.floor(Math.random() * state.sloganPresets.length);
+    state.slogan = state.sloganPresets[idx];
+    els.sloganText.value = state.slogan;
+    renderSloganPresets();
+    render();
+  });
+
+  els.sloganPresetInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      els.sloganAddPresetBtn.click();
+    }
+  });
 
   // 裁剪弹窗
   els.cropCancel.addEventListener("click", closeCropModal);
@@ -783,13 +892,23 @@ function bindEvents() {
     state.mainImageWidth = DEFAULT_STATE.mainImageWidth;
     state.mainImageHeight = DEFAULT_STATE.mainImageHeight;
     state.aspectRatio = DEFAULT_STATE.aspectRatio;
-    state.starCount = DEFAULT_STATE.starCount;
-    state.starSize = DEFAULT_STATE.starSize;
-    state.starSpacing = DEFAULT_STATE.starSpacing;
-    state.starX = DEFAULT_STATE.starX;
-    state.starY = DEFAULT_STATE.starY;
+    state.blueprintText = DEFAULT_STATE.blueprintText;
+    state.blueprintX = DEFAULT_STATE.blueprintX;
+    state.blueprintY = DEFAULT_STATE.blueprintY;
+    state.blueprintColor = DEFAULT_STATE.blueprintColor;
+    state.blueprintFontSize = DEFAULT_STATE.blueprintFontSize;
+    state.tags = DEFAULT_STATE.tags;
+    state.tagsX = DEFAULT_STATE.tagsX;
+    state.tagsY = DEFAULT_STATE.tagsY;
+    state.tagsColor = DEFAULT_STATE.tagsColor;
+    state.tagsFontSize = DEFAULT_STATE.tagsFontSize;
+    state.slogan = DEFAULT_STATE.slogan;
+    state.sloganX = DEFAULT_STATE.sloganX;
+    state.sloganY = DEFAULT_STATE.sloganY;
+    state.sloganColor = DEFAULT_STATE.sloganColor;
+    state.sloganFontSize = DEFAULT_STATE.sloganFontSize;
+    state.sloganPresets = DEFAULT_STATE.sloganPresets;
     els.mainImageInput.value = "";
-    els.starImageInput.value = "";
     syncStateToUI();
     saveStateNow();
     render();
