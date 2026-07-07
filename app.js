@@ -248,6 +248,24 @@ function drawCenteredText(ctx, text, opts) {
   ctx.restore();
 }
 
+function drawLeftAlignedText(ctx, text, opts) {
+  if (!text) return;
+  const { x, y, maxWidth, fontSize, color } = opts;
+  ctx.save();
+  ctx.font = `900 ${fontSize}px ${FONT_STACK}`;
+  ctx.fillStyle = color;
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  const lines = wrapLines(ctx, text, maxWidth);
+  const lineHeight = fontSize * 1.15;
+  const totalH = lines.length * lineHeight;
+  const firstBaseline = y - totalH / 2 + lineHeight / 2;
+  lines.forEach((line, i) => {
+    ctx.fillText(line, x, firstBaseline + i * lineHeight);
+  });
+  ctx.restore();
+}
+
 function render() {
   if (!state.templateImage) return;
   const cw = Number(state.canvasWidth) || 1080;
@@ -282,7 +300,7 @@ function render() {
   if (state.blueprintText) {
     const bpX = Number(state.blueprintX) || cw / 2;
     const bpY = Number(state.blueprintY) || 60;
-    drawCenteredText(ctx, state.blueprintText, {
+    drawLeftAlignedText(ctx, state.blueprintText, {
       x: bpX,
       y: bpY,
       maxWidth: Math.max(200, cw - 80),
@@ -295,7 +313,7 @@ function render() {
   if (state.tags) {
     const tagsX = Number(state.tagsX) || cw / 2;
     const tagsY = Number(state.tagsY) || 100;
-    drawCenteredText(ctx, state.tags, {
+    drawLeftAlignedText(ctx, state.tags, {
       x: tagsX,
       y: tagsY,
       maxWidth: Math.max(200, cw - 80),
@@ -308,7 +326,7 @@ function render() {
   if (state.slogan) {
     const sloganX = Number(state.sloganX) || cw / 2;
     const sloganY = Number(state.sloganY) || 200;
-    drawCenteredText(ctx, state.slogan, {
+    drawLeftAlignedText(ctx, state.slogan, {
       x: sloganX,
       y: sloganY,
       maxWidth: Math.max(200, cw - 80),
@@ -930,5 +948,13 @@ function bindEvents() {
   });
 }
 
-bindEvents();
-bootstrap();
+function initApp() {
+  bindEvents();
+  bootstrap();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
