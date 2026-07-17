@@ -21,7 +21,7 @@ const BlueprintApp = (() => {
     gridW: 0,
     gridH: 0,
     gridGenerated: false,
-    currentMode: 'image',       // 'image' | 'grid'
+    currentMode: 'image',       // 'image' | 'grid' | 'all'
     imageOffX: 0,
     imageOffY: 0,
     imageScale: 1,
@@ -387,7 +387,12 @@ const BlueprintApp = (() => {
       if (state.currentMode === 'image') {
         state.imageOffX = alignDrag.imgOffX + dx;
         state.imageOffY = alignDrag.imgOffY + dy;
+      } else if (state.currentMode === 'grid') {
+        state.gridOffX = alignDrag.gridOffX + dx;
+        state.gridOffY = alignDrag.gridOffY + dy;
       } else {
+        state.imageOffX = alignDrag.imgOffX + dx;
+        state.imageOffY = alignDrag.imgOffY + dy;
         state.gridOffX = alignDrag.gridOffX + dx;
         state.gridOffY = alignDrag.gridOffY + dy;
       }
@@ -413,7 +418,10 @@ const BlueprintApp = (() => {
       const delta = -e.deltaY * 0.002;
       if (state.currentMode === 'image') {
         state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
+      } else if (state.currentMode === 'grid') {
+        state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       } else {
+        state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       }
       renderAlignmentCanvas();
@@ -549,10 +557,6 @@ const BlueprintApp = (() => {
     // 1) 绘制图纸（限制偏移，确保不消失）
     const dispW = img.width * state.imageScale;
     const dispH = img.height * state.imageScale;
-    const maxOffX = Math.abs((dispW - cw) / 2) + 20;
-    const maxOffY = Math.abs((dispH - ch) / 2) + 20;
-    state.imageOffX = clamp(state.imageOffX, -maxOffX, maxOffX);
-    state.imageOffY = clamp(state.imageOffY, -maxOffY, maxOffY);
 
     ctx.save();
     const icx = cw / 2 + state.imageOffX;
@@ -694,7 +698,12 @@ const BlueprintApp = (() => {
       if (state.currentMode === 'image') {
         state.imageOffX = alignDrag.imgOffX + dx;
         state.imageOffY = alignDrag.imgOffY + dy;
+      } else if (state.currentMode === 'grid') {
+        state.gridOffX = alignDrag.gridOffX + dx;
+        state.gridOffY = alignDrag.gridOffY + dy;
       } else {
+        state.imageOffX = alignDrag.imgOffX + dx;
+        state.imageOffY = alignDrag.imgOffY + dy;
         state.gridOffX = alignDrag.gridOffX + dx;
         state.gridOffY = alignDrag.gridOffY + dy;
       }
@@ -706,7 +715,10 @@ const BlueprintApp = (() => {
       const ratio = nd / alignDrag.dist;
       if (state.currentMode === 'image') {
         state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
+      } else if (state.currentMode === 'grid') {
+        state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
       } else {
+        state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
         state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
       }
       alignDrag.dist = nd;

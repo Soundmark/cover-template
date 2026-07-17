@@ -810,15 +810,23 @@ body {
   }
 
   .bp-steps {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 4px;
   }
 
   .bp-step {
-    flex: 1 1 45%;
+    flex: 1;
+    padding: 6px 8px;
   }
 
   .bp-step-label {
-    font-size: 11px;
+    font-size: 10px;
+  }
+
+  .bp-step-num {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
   }
 }
 
