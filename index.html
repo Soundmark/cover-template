@@ -34,11 +34,7 @@
         </div>
         <div class="bp-step" data-step="3">
           <span class="bp-step-num">3</span>
-          <span class="bp-step-label">选择格子</span>
-        </div>
-        <div class="bp-step" data-step="4">
-          <span class="bp-step-num">4</span>
-          <span class="bp-step-label">结果</span>
+          <span class="bp-step-label">对齐网格</span>
         </div>
       </div>
 
@@ -53,18 +49,18 @@
           <div class="bp-canvas-container" id="bp-canvas-container" hidden>
             <div class="bp-canvas-wrapper" id="bp-canvas-wrapper">
               <canvas id="bp-canvas"></canvas>
-              <div class="bp-overlay" id="bp-overlay">
-                <!-- 裁剪框 -->
-                <div class="bp-crop-box" id="bp-crop-box" hidden></div>
-                <!-- 格子框 -->
-                <div class="bp-grid-box" id="bp-grid-box" hidden></div>
+              <div class="crop-stage" id="bp-crop-stage" hidden>
+                <div class="crop-rect" id="bp-crop-rect">
+                  <div class="handle nw" data-handle="nw"></div>
+                  <div class="handle n" data-handle="n"></div>
+                  <div class="handle ne" data-handle="ne"></div>
+                  <div class="handle e" data-handle="e"></div>
+                  <div class="handle se" data-handle="se"></div>
+                  <div class="handle s" data-handle="s"></div>
+                  <div class="handle sw" data-handle="sw"></div>
+                  <div class="handle w" data-handle="w"></div>
+                </div>
               </div>
-            </div>
-            <!-- 缩放控制 -->
-            <div class="bp-zoom-controls" id="bp-zoom-controls" hidden>
-              <button class="bp-zoom-btn" id="bp-zoom-out">−</button>
-              <span class="bp-zoom-level" id="bp-zoom-level">100%</span>
-              <button class="bp-zoom-btn" id="bp-zoom-in">+</button>
             </div>
           </div>
         </div>
@@ -79,25 +75,27 @@
 
           <!-- 步骤2: 裁剪确认 -->
           <div class="bp-action-step" id="bp-action-step2" hidden>
-            <p class="hint">拖动裁剪框选择图纸区域</p>
+            <p class="hint">单指拖动平移 · 双指缩放 · 拖动边框调整裁剪框</p>
             <button class="btn primary" id="bp-confirm-crop">确认裁剪</button>
             <button class="btn" id="bp-cancel-crop">取消</button>
           </div>
 
-          <!-- 步骤3: 选择格子 -->
+          <!-- 步骤3: 对齐网格 -->
           <div class="bp-action-step" id="bp-action-step3" hidden>
-            <p class="hint">在裁剪区域内拖动选择一个最小格子</p>
-            <button class="btn primary" id="bp-confirm-grid">确认格子</button>
-            <button class="btn" id="bp-redo-crop">重新裁剪</button>
-          </div>
-
-          <!-- 步骤4: 结果展示 -->
-          <div class="bp-action-step" id="bp-action-step4" hidden>
-            <div class="bp-result">
-              <h3>图纸尺寸</h3>
-              <div class="bp-result-value" id="bp-result-value">— × —</div>
-              <p class="hint">宽 × 高 (格子数量)</p>
+            <div class="bp-grid-inputs">
+              <label>格子数</label>
+              <div class="bp-grid-input-row">
+                <input type="number" id="bp-grid-w" min="1" placeholder="宽" />
+                <span class="bp-grid-input-x">×</span>
+                <input type="number" id="bp-grid-h" min="1" placeholder="高" />
+              </div>
             </div>
+            <button class="btn primary" id="bp-generate-grid">生成网格</button>
+            <div class="bp-mode-toggle" id="bp-mode-toggle" hidden>
+              <button class="btn small mode-btn active" data-mode="image">🖐 调整图纸</button>
+              <button class="btn small mode-btn" data-mode="grid">⊞ 调整网格</button>
+            </div>
+            <p class="hint">单指拖拽移动 · 双指缩放大小</p>
             <button class="btn" id="bp-restart">重新开始</button>
           </div>
         </div>
