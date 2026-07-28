@@ -697,6 +697,9 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
+  margin: 0;
+  max-height: none;
+  overflow: visible;
   touch-action: none;
   pointer-events: none;
   background: transparent;

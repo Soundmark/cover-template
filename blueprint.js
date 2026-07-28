@@ -208,13 +208,7 @@ const BlueprintApp = (() => {
   // ── 固定裁剪框 ──
   function initCropFrame() {
     const { cw, ch } = getWrapperSize();
-    const margin = 0.1;
-    state.cropFrame = {
-      x: Math.round(cw * margin),
-      y: Math.round(ch * margin),
-      w: Math.round(cw * (1 - 2 * margin)),
-      h: Math.round(ch * (1 - 2 * margin)),
-    };
+    state.cropFrame = { x: 0, y: 0, w: cw, h: ch };
     updateCropFrame();
   }
 
@@ -259,13 +253,12 @@ const BlueprintApp = (() => {
     const dx = mx - cropDrag.startX;
     const dy = my - cropDrag.startY;
     const sf = cropDrag.frame;
-    const { cw, ch } = getWrapperSize();
     let { x, y, w, h } = sf;
 
     switch (cropDrag.type) {
       case 'move':
-        x = clamp(sf.x + dx, 0, cw - sf.w);
-        y = clamp(sf.y + dy, 0, ch - sf.h);
+        x = sf.x + dx;
+        y = sf.y + dy;
         break;
       case 'se': w = sf.w + dx; h = sf.h + dy; break;
       case 'e':  w = sf.w + dx; break;
@@ -280,12 +273,6 @@ const BlueprintApp = (() => {
     // 最小尺寸
     w = Math.max(30, w);
     h = Math.max(30, h);
-
-    // 裁切边界
-    if (x + w > cw) { w = cw - x; }
-    if (y + h > ch) { h = ch - y; }
-    x = Math.max(0, x);
-    y = Math.max(0, y);
 
     state.cropFrame = { x, y, w, h };
     updateCropFrame();
@@ -329,11 +316,10 @@ const BlueprintApp = (() => {
     if (imgTouch.type === 'pan' && t.length === 1) {
       const dx = t[0].clientX - imgTouch.x;
       const dy = t[0].clientY - imgTouch.y;
-      const { cw, ch } = getWrapperSize();
       state.imgPanX = imgTouch.panX + dx;
       state.imgPanY = imgTouch.panY + dy;
-      state.cropFrame.x = clamp(imgTouch.frameX + dx, 0, cw - state.cropFrame.w);
-      state.cropFrame.y = clamp(imgTouch.frameY + dy, 0, ch - state.cropFrame.h);
+      state.cropFrame.x = imgTouch.frameX + dx;
+      state.cropFrame.y = imgTouch.frameY + dy;
       renderCanvas();
       updateCropFrame();
     } else if (imgTouch.type === 'zoom' && t.length >= 2) {
@@ -371,13 +357,18 @@ const BlueprintApp = (() => {
     if (state.step === 2 && imgMousePan) {
       const dx = e.clientX - imgMousePan.x;
       const dy = e.clientY - imgMousePan.y;
-      const { cw, ch } = getWrapperSize();
       state.imgPanX = imgMousePan.panX + dx;
       state.imgPanY = imgMousePan.panY + dy;
-      state.cropFrame.x = clamp(imgMousePan.frameX + dx, 0, cw - state.cropFrame.w);
-      state.cropFrame.y = clamp(imgMousePan.frameY + dy, 0, ch - state.cropFrame.h);
+      state.cropFrame.x = imgMousePan.frameX + dx;
+      state.cropFrame.y = imgMousePan.frameY + dy;
       renderCanvas();
       updateCropFrame();
+      return;
+    }
+    // 步骤 2：裁剪框拖拽（手柄 resize / 框移动）
+    if (state.step === 2 && cropDrag) {
+      const rect = els.canvasWrapper.getBoundingClientRect();
+      onCropFrameMove(e.clientX - rect.left, e.clientY - rect.top);
       return;
     }
     // 步骤 3：对齐拖拽
@@ -403,6 +394,7 @@ const BlueprintApp = (() => {
   function onCanvasMouseUp() {
     imgMousePan = null;
     alignDrag = null;
+    onCropFrameEnd();
   }
 
   function onCanvasWheel(e) {
