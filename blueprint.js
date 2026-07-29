@@ -195,6 +195,7 @@ const BlueprintApp = (() => {
     canvas.style.height = ch + 'px';
 
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(0, 0, cw, ch);
 
@@ -504,6 +505,7 @@ const BlueprintApp = (() => {
     oc.width = sw;
     oc.height = sh;
     const octx = oc.getContext('2d');
+    octx.imageSmoothingEnabled = false;
     octx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
     const dataUrl = oc.toDataURL();
 
@@ -544,6 +546,7 @@ const BlueprintApp = (() => {
     canvas.style.height = ch + 'px';
 
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, cw, ch);
 
     // 1) 绘制图纸（限制偏移，确保不消失）
