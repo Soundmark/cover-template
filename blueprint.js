@@ -7,9 +7,11 @@ const BlueprintApp = (() => {
   let state = {
     step: 1,
     originalImage: null,
+    originalDataUrl: null,
     originalWidth: 0,
     originalHeight: 0,
     croppedImage: null,
+    croppedDataUrl: null,
 
     // 步骤 2 —— 固定裁剪框（屏幕坐标，相对 canvas-wrapper）
     cropFrame: { x: 0, y: 0, w: 0, h: 0 },
@@ -77,8 +79,55 @@ const BlueprintApp = (() => {
     return { cw: Math.round(rect.width), ch: Math.round(rect.height) };
   }
 
+  // ── localStorage 缓存 ──
+  const LS_BP_STATE = 'blueprintState';
+
+  function saveCache() {
+    if (!state.originalImage) return;  // 没上传图片就不缓存
+    try {
+      const persist = { ...state };
+      delete persist.originalImage;
+      delete persist.croppedImage;
+      localStorage.setItem(LS_BP_STATE, JSON.stringify(persist));
+    } catch (e) { /* 存储满，静默忽略 */ }
+  }
+
+  function saveCacheDebounced() {
+    clearTimeout(saveCacheDebounced._t);
+    saveCacheDebounced._t = setTimeout(saveCache, 300);
+  }
+
+  function clearCache() {
+    localStorage.removeItem(LS_BP_STATE);
+  }
+
+  async function loadCache() {
+    const raw = localStorage.getItem(LS_BP_STATE);
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      if (!saved.step || saved.step < 2 || saved.step > 3) return false;
+      if (!saved.originalDataUrl) return false;
+
+      // 恢复状态（不含 Image 对象）
+      Object.assign(state, saved);
+
+      // 从 dataURL 恢复图片
+      state.originalImage = await loadImage(saved.originalDataUrl);
+      if (saved.croppedDataUrl) {
+        state.croppedImage = await loadImage(saved.croppedDataUrl);
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // ── 初始化 ──
-  function init() {
+  let _pendingRestore = false;
+
+  async function init() {
     els = {
       tabBtns:          document.querySelectorAll('.tab-btn'),
       blueprintWorkspace: $('blueprint-workspace'),
@@ -107,6 +156,15 @@ const BlueprintApp = (() => {
       modeBtns:         document.querySelectorAll('.mode-btn'),
     };
     bindEvents();
+
+    // 恢复缓存（仅恢复数据，等切换到 blueprint tab 时再渲染 UI）
+    const restored = await loadCache();
+    if (restored) {
+      _pendingRestore = true;
+      els.uploadZone.hidden = true;
+      els.canvasContainer.hidden = false;
+    }
+
     switchTab('cover');
   }
 
@@ -120,6 +178,26 @@ const BlueprintApp = (() => {
     document.querySelector('.app').hidden = tabName !== 'cover';
     // 切回封面时重绘 canvas（display:none 恢复后 canvas 可能不会自动重绘）
     if (tabName === 'cover' && typeof render === 'function') render();
+
+    // 切换到 blueprint 时，如果有缓存的会话需要恢复，延迟一帧等布局完成
+    if (tabName === 'blueprint' && _pendingRestore) {
+      _pendingRestore = false;
+      requestAnimationFrame(() => {
+        if (state.step === 2 && state.originalImage) {
+          // 重置 pan/zoom，因为 cropFrame 会被 initCropFrame 重新计算
+          state.imgPanX = 0;
+          state.imgPanY = 0;
+          state.imgZoom = fitImageZoom(state.originalImage);
+          setStep(2);
+        } else if (state.step === 3 && state.croppedImage) {
+          els.gridW.value = state.gridW || '';
+          els.gridH.value = state.gridH || '';
+          els.modeToggle.hidden = !state.gridGenerated;
+          updateModeButtons();
+          setStep(3);
+        }
+      });
+    }
   }
 
   // ── 步骤控制 ──
@@ -144,6 +222,8 @@ const BlueprintApp = (() => {
     } else if (step === 3 && state.croppedImage) {
       requestAnimationFrame(() => renderAlignmentCanvas());
     }
+
+    saveCache();
   }
 
   // ════════════════════════════════════════
@@ -159,6 +239,7 @@ const BlueprintApp = (() => {
       const dataUrl = await fileToDataURL(file);
       const img = await loadImage(dataUrl);
       state.originalImage = img;
+      state.originalDataUrl = dataUrl;
       state.originalWidth = img.width;
       state.originalHeight = img.height;
       state.imgPanX = 0;
@@ -333,7 +414,7 @@ const BlueprintApp = (() => {
   }
 
   function onImgTouchEnd(e) {
-    if (e.touches.length === 0) imgTouch = null;
+    if (e.touches.length === 0) { imgTouch = null; saveCache(); }
   }
 
   // ════════════════════════════════════════
@@ -396,6 +477,7 @@ const BlueprintApp = (() => {
     imgMousePan = null;
     alignDrag = null;
     onCropFrameEnd();
+    saveCache();
   }
 
   function onCanvasWheel(e) {
@@ -404,6 +486,7 @@ const BlueprintApp = (() => {
       const delta = -e.deltaY * 0.002;
       state.imgZoom = clamp(state.imgZoom + delta, 0.05, 20);
       renderCanvas();
+      saveCacheDebounced();
       return;
     }
     if (state.step === 3 && state.croppedImage) {
@@ -418,6 +501,7 @@ const BlueprintApp = (() => {
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       }
       renderAlignmentCanvas();
+      saveCacheDebounced();
     }
   }
 
@@ -462,7 +546,7 @@ const BlueprintApp = (() => {
   }
 
   function onFrameTouchEnd(e) {
-    if (e.touches.length === 0) onCropFrameEnd();
+    if (e.touches.length === 0) { onCropFrameEnd(); saveCache(); }
   }
 
   // ════════════════════════════════════════
@@ -512,6 +596,7 @@ const BlueprintApp = (() => {
     const cropped = new Image();
     cropped.onload = () => {
       state.croppedImage = cropped;
+      state.croppedDataUrl = dataUrl;
       state.gridGenerated = false;
       state.currentMode = 'image';
       state.imageOffX = 0;
@@ -642,12 +727,14 @@ const BlueprintApp = (() => {
     els.modeToggle.hidden = false;
     updateModeButtons();
     renderAlignmentCanvas();
+    saveCache();
   }
 
   // ── 模式切换 ──
   function switchMode(mode) {
     state.currentMode = mode;
     updateModeButtons();
+    saveCache();
   }
 
   function updateModeButtons() {
@@ -726,6 +813,7 @@ const BlueprintApp = (() => {
   function onAlignTouchEnd(e) {
     if (e.touches.length === 0) {
       alignDrag = null;
+      saveCache();
     } else if (e.touches.length === 1 && alignDrag && alignDrag.type === 'pinch') {
       alignDrag = {
         type: 'drag',
@@ -753,9 +841,11 @@ const BlueprintApp = (() => {
 
   function resetImage() {
     state.originalImage = null;
+    state.originalDataUrl = null;
     state.originalWidth = 0;
     state.originalHeight = 0;
     state.croppedImage = null;
+    state.croppedDataUrl = null;
     state.cropFrame = { x: 0, y: 0, w: 0, h: 0 };
     state.imgPanX = 0;
     state.imgPanY = 0;
@@ -776,6 +866,7 @@ const BlueprintApp = (() => {
     els.canvasContainer.hidden = true;
     els.modeToggle.hidden = true;
 
+    clearCache();
     setStep(1);
   }
 
