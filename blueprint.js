@@ -7,9 +7,11 @@ const BlueprintApp = (() => {
   let state = {
     step: 1,
     originalImage: null,
+    originalDataUrl: null,
     originalWidth: 0,
     originalHeight: 0,
     croppedImage: null,
+    croppedDataUrl: null,
 
     // 步骤 2 —— 固定裁剪框（屏幕坐标，相对 canvas-wrapper）
     cropFrame: { x: 0, y: 0, w: 0, h: 0 },
@@ -28,6 +30,11 @@ const BlueprintApp = (() => {
     gridOffX: 0,
     gridOffY: 0,
     gridScale: 1,
+
+    // 步骤 4 —— 创作（在网格上涂色）
+    gridPaint: {},              // key "row,col" → beadColor id
+    craftTool: 'paint',         // 'paint' | 'pick' | 'erase'
+    activeColorId: 'A01',
   };
 
   // 裁剪框拖拽（handle resize + frame move）
@@ -36,6 +43,10 @@ const BlueprintApp = (() => {
   let imgTouch = null;
   // 步骤 3 触屏/鼠标状态
   let alignDrag = null;
+  // 步骤 4 涂色拖拽状态
+  let craftDrag = null;
+  // 步骤 4 撤销栈（每个笔画前的 gridPaint 快照）
+  let paintHistory = [];
 
   // ── DOM 缓存 ──
   const $ = (id) => document.getElementById(id);
@@ -77,8 +88,55 @@ const BlueprintApp = (() => {
     return { cw: Math.round(rect.width), ch: Math.round(rect.height) };
   }
 
+  // ── localStorage 缓存 ──
+  const LS_BP_STATE = 'blueprintState';
+
+  function saveCache() {
+    if (!state.originalImage) return;  // 没上传图片就不缓存
+    try {
+      const persist = { ...state };
+      delete persist.originalImage;
+      delete persist.croppedImage;
+      localStorage.setItem(LS_BP_STATE, JSON.stringify(persist));
+    } catch (e) { /* 存储满，静默忽略 */ }
+  }
+
+  function saveCacheDebounced() {
+    clearTimeout(saveCacheDebounced._t);
+    saveCacheDebounced._t = setTimeout(saveCache, 300);
+  }
+
+  function clearCache() {
+    localStorage.removeItem(LS_BP_STATE);
+  }
+
+  async function loadCache() {
+    const raw = localStorage.getItem(LS_BP_STATE);
+    if (!raw) return false;
+    try {
+      const saved = JSON.parse(raw);
+      if (!saved.step || saved.step < 2 || saved.step > 4) return false;
+      if (!saved.originalDataUrl) return false;
+
+      // 恢复状态（不含 Image 对象）
+      Object.assign(state, saved);
+
+      // 从 dataURL 恢复图片
+      state.originalImage = await loadImage(saved.originalDataUrl);
+      if (saved.croppedDataUrl) {
+        state.croppedImage = await loadImage(saved.croppedDataUrl);
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // ── 初始化 ──
-  function init() {
+  let _pendingRestore = false;
+
+  async function init() {
     els = {
       tabBtns:          document.querySelectorAll('.tab-btn'),
       blueprintWorkspace: $('blueprint-workspace'),
@@ -105,8 +163,32 @@ const BlueprintApp = (() => {
       generateGrid:     $('bp-generate-grid'),
       modeToggle:       $('bp-mode-toggle'),
       modeBtns:         document.querySelectorAll('.mode-btn'),
+      startCraft:       $('bp-start-craft'),
+      actionStep4:      $('bp-action-step4'),
+      craftBtns:        document.querySelectorAll('.craft-btn'),
+      currentSwatch:    $('bp-current-swatch'),
+      currentId:        $('bp-current-id'),
+      currentColor:     $('bp-current-color'),
+      palette:          $('bp-palette'),
+      paletteModal:     $('bp-palette-modal'),
+      paletteClose:     $('bp-palette-close'),
+      undo:             $('bp-undo'),
+      resetModal:       $('bp-reset-modal'),
+      resetCancel:      $('bp-reset-cancel'),
+      resetConfirm:     $('bp-reset-confirm'),
+      backToAlign:      $('bp-back-to-align'),
+      restart2:         $('bp-restart2'),
     };
     bindEvents();
+
+    // 恢复缓存（仅恢复数据，等切换到 blueprint tab 时再渲染 UI）
+    const restored = await loadCache();
+    if (restored) {
+      _pendingRestore = true;
+      els.uploadZone.hidden = true;
+      els.canvasContainer.hidden = false;
+    }
+
     switchTab('cover');
   }
 
@@ -120,6 +202,33 @@ const BlueprintApp = (() => {
     document.querySelector('.app').hidden = tabName !== 'cover';
     // 切回封面时重绘 canvas（display:none 恢复后 canvas 可能不会自动重绘）
     if (tabName === 'cover' && typeof render === 'function') render();
+
+    // 切换到 blueprint 时，如果有缓存的会话需要恢复，延迟一帧等布局完成
+    if (tabName === 'blueprint' && _pendingRestore) {
+      _pendingRestore = false;
+      requestAnimationFrame(() => {
+        if (state.step === 2 && state.originalImage) {
+          // 重置 pan/zoom，因为 cropFrame 会被 initCropFrame 重新计算
+          state.imgPanX = 0;
+          state.imgPanY = 0;
+          state.imgZoom = fitImageZoom(state.originalImage);
+          setStep(2);
+        } else if (state.step === 3 && state.croppedImage) {
+          els.gridW.value = state.gridW || '';
+          els.gridH.value = state.gridH || '';
+          els.modeToggle.hidden = !state.gridGenerated;
+          els.startCraft.hidden = !state.gridGenerated;
+          updateModeButtons();
+          setStep(3);
+        } else if (state.step === 4 && state.croppedImage) {
+          els.gridW.value = state.gridW || '';
+          els.gridH.value = state.gridH || '';
+          els.modeToggle.hidden = !state.gridGenerated;
+          els.startCraft.hidden = !state.gridGenerated;
+          setStep(4);
+        }
+      });
+    }
   }
 
   // ── 步骤控制 ──
@@ -136,14 +245,23 @@ const BlueprintApp = (() => {
     els.actionStep1.hidden  = step !== 1;
     els.actionStep2.hidden  = step !== 2;
     els.actionStep3.hidden  = step !== 3;
+    els.actionStep4.hidden  = step !== 4;
     els.cropStage.hidden    = step !== 2;
 
     if (step === 2 && state.originalImage) {
       renderCanvas();
       initCropFrame();
     } else if (step === 3 && state.croppedImage) {
+      els.startCraft.hidden = !state.gridGenerated;
       requestAnimationFrame(() => renderAlignmentCanvas());
+    } else if (step === 4 && state.croppedImage) {
+      ensurePaletteBuilt();
+      updateCraftToolButtons();
+      updateCurrentColorDisplay();
+      requestAnimationFrame(() => renderCreationCanvas());
     }
+
+    saveCache();
   }
 
   // ════════════════════════════════════════
@@ -159,6 +277,7 @@ const BlueprintApp = (() => {
       const dataUrl = await fileToDataURL(file);
       const img = await loadImage(dataUrl);
       state.originalImage = img;
+      state.originalDataUrl = dataUrl;
       state.originalWidth = img.width;
       state.originalHeight = img.height;
       state.imgPanX = 0;
@@ -195,6 +314,7 @@ const BlueprintApp = (() => {
     canvas.style.height = ch + 'px';
 
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(0, 0, cw, ch);
 
@@ -208,13 +328,7 @@ const BlueprintApp = (() => {
   // ── 固定裁剪框 ──
   function initCropFrame() {
     const { cw, ch } = getWrapperSize();
-    const margin = 0.1;
-    state.cropFrame = {
-      x: Math.round(cw * margin),
-      y: Math.round(ch * margin),
-      w: Math.round(cw * (1 - 2 * margin)),
-      h: Math.round(ch * (1 - 2 * margin)),
-    };
+    state.cropFrame = { x: 0, y: 0, w: cw, h: ch };
     updateCropFrame();
   }
 
@@ -259,13 +373,12 @@ const BlueprintApp = (() => {
     const dx = mx - cropDrag.startX;
     const dy = my - cropDrag.startY;
     const sf = cropDrag.frame;
-    const { cw, ch } = getWrapperSize();
     let { x, y, w, h } = sf;
 
     switch (cropDrag.type) {
       case 'move':
-        x = clamp(sf.x + dx, 0, cw - sf.w);
-        y = clamp(sf.y + dy, 0, ch - sf.h);
+        x = sf.x + dx;
+        y = sf.y + dy;
         break;
       case 'se': w = sf.w + dx; h = sf.h + dy; break;
       case 'e':  w = sf.w + dx; break;
@@ -280,12 +393,6 @@ const BlueprintApp = (() => {
     // 最小尺寸
     w = Math.max(30, w);
     h = Math.max(30, h);
-
-    // 裁切边界
-    if (x + w > cw) { w = cw - x; }
-    if (y + h > ch) { h = ch - y; }
-    x = Math.max(0, x);
-    y = Math.max(0, y);
 
     state.cropFrame = { x, y, w, h };
     updateCropFrame();
@@ -329,11 +436,10 @@ const BlueprintApp = (() => {
     if (imgTouch.type === 'pan' && t.length === 1) {
       const dx = t[0].clientX - imgTouch.x;
       const dy = t[0].clientY - imgTouch.y;
-      const { cw, ch } = getWrapperSize();
       state.imgPanX = imgTouch.panX + dx;
       state.imgPanY = imgTouch.panY + dy;
-      state.cropFrame.x = clamp(imgTouch.frameX + dx, 0, cw - state.cropFrame.w);
-      state.cropFrame.y = clamp(imgTouch.frameY + dy, 0, ch - state.cropFrame.h);
+      state.cropFrame.x = imgTouch.frameX + dx;
+      state.cropFrame.y = imgTouch.frameY + dy;
       renderCanvas();
       updateCropFrame();
     } else if (imgTouch.type === 'zoom' && t.length >= 2) {
@@ -346,7 +452,7 @@ const BlueprintApp = (() => {
   }
 
   function onImgTouchEnd(e) {
-    if (e.touches.length === 0) imgTouch = null;
+    if (e.touches.length === 0) { imgTouch = null; saveCache(); }
   }
 
   // ════════════════════════════════════════
@@ -367,17 +473,27 @@ const BlueprintApp = (() => {
   }
 
   function onCanvasMouseMove(e) {
+    // 步骤 4：涂色拖拽
+    if (state.step === 4 && craftDrag) {
+      onCraftMove(e.clientX, e.clientY);
+      return;
+    }
     // 步骤 2：图片平移（同时平移裁剪框，实现整体视图拖动）
     if (state.step === 2 && imgMousePan) {
       const dx = e.clientX - imgMousePan.x;
       const dy = e.clientY - imgMousePan.y;
-      const { cw, ch } = getWrapperSize();
       state.imgPanX = imgMousePan.panX + dx;
       state.imgPanY = imgMousePan.panY + dy;
-      state.cropFrame.x = clamp(imgMousePan.frameX + dx, 0, cw - state.cropFrame.w);
-      state.cropFrame.y = clamp(imgMousePan.frameY + dy, 0, ch - state.cropFrame.h);
+      state.cropFrame.x = imgMousePan.frameX + dx;
+      state.cropFrame.y = imgMousePan.frameY + dy;
       renderCanvas();
       updateCropFrame();
+      return;
+    }
+    // 步骤 2：裁剪框拖拽（手柄 resize / 框移动）
+    if (state.step === 2 && cropDrag) {
+      const rect = els.canvasWrapper.getBoundingClientRect();
+      onCropFrameMove(e.clientX - rect.left, e.clientY - rect.top);
       return;
     }
     // 步骤 3：对齐拖拽
@@ -401,8 +517,15 @@ const BlueprintApp = (() => {
   }
 
   function onCanvasMouseUp() {
+    // 步骤 4：结束涂色
+    if (state.step === 4) {
+      onCraftEnd();
+      return;
+    }
     imgMousePan = null;
     alignDrag = null;
+    onCropFrameEnd();
+    saveCache();
   }
 
   function onCanvasWheel(e) {
@@ -411,6 +534,7 @@ const BlueprintApp = (() => {
       const delta = -e.deltaY * 0.002;
       state.imgZoom = clamp(state.imgZoom + delta, 0.05, 20);
       renderCanvas();
+      saveCacheDebounced();
       return;
     }
     if (state.step === 3 && state.croppedImage) {
@@ -425,6 +549,7 @@ const BlueprintApp = (() => {
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       }
       renderAlignmentCanvas();
+      saveCacheDebounced();
     }
   }
 
@@ -469,7 +594,7 @@ const BlueprintApp = (() => {
   }
 
   function onFrameTouchEnd(e) {
-    if (e.touches.length === 0) onCropFrameEnd();
+    if (e.touches.length === 0) { onCropFrameEnd(); saveCache(); }
   }
 
   // ════════════════════════════════════════
@@ -512,12 +637,14 @@ const BlueprintApp = (() => {
     oc.width = sw;
     oc.height = sh;
     const octx = oc.getContext('2d');
+    octx.imageSmoothingEnabled = false;
     octx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
     const dataUrl = oc.toDataURL();
 
     const cropped = new Image();
     cropped.onload = () => {
       state.croppedImage = cropped;
+      state.croppedDataUrl = dataUrl;
       state.gridGenerated = false;
       state.currentMode = 'image';
       state.imageOffX = 0;
@@ -526,9 +653,15 @@ const BlueprintApp = (() => {
       state.gridOffX = 0;
       state.gridOffY = 0;
       state.gridScale = 1;
+      // 新裁剪图：清空旧的涂色与取色缓存
+      state.gridPaint = {};
+      state.craftTool = 'paint';
+      _imageSampleCanvas = null;
+      paintHistory = [];
       els.gridW.value = '';
       els.gridH.value = '';
       els.modeToggle.hidden = true;
+      els.startCraft.hidden = true;
       setStep(3);
     };
     cropped.src = dataUrl;
@@ -546,17 +679,26 @@ const BlueprintApp = (() => {
     const { cw, ch } = getWrapperSize();
     if (cw <= 0 || ch <= 0) return;
 
+    const ctx = setupCanvas(canvas, cw, ch);
+    drawImageAndGrid(ctx, cw, ch);
+  }
+
+  // 初始化 canvas 尺寸并清空（步骤 3/4 共用）
+  function setupCanvas(canvas, cw, ch) {
     canvas.width = cw;
     canvas.height = ch;
     canvas.style.width = cw + 'px';
     canvas.style.height = ch + 'px';
-
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, cw, ch);
+    return ctx;
+  }
 
-    // 1) 绘制图纸（限制偏移，确保不消失）
-    const dispW = img.width * state.imageScale;
-    const dispH = img.height * state.imageScale;
+  // 画图纸 + 网格（步骤 3/4 共用）
+  function drawImageAndGrid(ctx, cw, ch) {
+    const img = state.croppedImage;
+    if (!img) return;
 
     ctx.save();
     const icx = cw / 2 + state.imageOffX;
@@ -566,13 +708,13 @@ const BlueprintApp = (() => {
     ctx.drawImage(img, -img.width / 2, -img.height / 2);
     ctx.restore();
 
-    // 2) 绘制网格
     if (state.gridGenerated && state.gridW > 0 && state.gridH > 0) {
       drawGrid(ctx, cw, ch);
     }
   }
 
-  function drawGrid(ctx, cw, ch) {
+  // 网格几何（cellSize / 左上角 gx0,gy0 / 总像素宽高），drawGrid / 涂色 / 命中检测共用
+  function getGridGeometry(cw, ch) {
     const { gridW, gridH, gridOffX, gridOffY, gridScale } = state;
     const cellSize = Math.min(cw / gridW, ch / gridH) * gridScale;
     const gridPixelW = cellSize * gridW;
@@ -581,6 +723,12 @@ const BlueprintApp = (() => {
     const gcy = ch / 2 + gridOffY;
     const gx0 = gcx - gridPixelW / 2;
     const gy0 = gcy - gridPixelH / 2;
+    return { cellSize, gridPixelW, gridPixelH, gx0, gy0 };
+  }
+
+  function drawGrid(ctx, cw, ch) {
+    const { gridW, gridH } = state;
+    const { cellSize, gridPixelW, gridPixelH, gx0, gy0 } = getGridGeometry(cw, ch);
 
     ctx.save();
     ctx.strokeStyle = '#ff2442';
@@ -601,6 +749,387 @@ const BlueprintApp = (() => {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // ── 步骤 4：渲染（图纸 + 网格 + 涂色层） ──
+  function renderCreationCanvas() {
+    const canvas = els.canvas;
+    const img = state.croppedImage;
+    if (!img) return;
+
+    const { cw, ch } = getWrapperSize();
+    if (cw <= 0 || ch <= 0) return;
+
+    const ctx = setupCanvas(canvas, cw, ch);
+    drawImageAndGrid(ctx, cw, ch);
+    drawPaintedCells(ctx, cw, ch);
+  }
+
+  // 绘制已涂色格子（半透明色块 + 浅边）
+  function drawPaintedCells(ctx, cw, ch) {
+    const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
+    if (cellSize <= 0) return;
+    const colorMap = buildColorIdMap();
+    const pad = Math.max(0, cellSize * 0.04);
+
+    ctx.save();
+    for (const key in state.gridPaint) {
+      const id = state.gridPaint[key];
+      const c = colorMap[id];
+      if (!c) continue;
+      const [r, col] = key.split(',').map(Number);
+      const x = gx0 + col * cellSize + pad;
+      const y = gy0 + r * cellSize + pad;
+      const s = cellSize - pad * 2;
+      ctx.fillStyle = c.hex;
+      ctx.globalAlpha = 0.82;
+      ctx.fillRect(x, y, s, s);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ════════════════════════════════════════
+  //  步骤 4：创作（涂色 / 吸色 / 橡皮）
+  // ════════════════════════════════════════
+
+  // beadColor id → 颜色对象 的映射（静态，构建一次）
+  let _colorIdMap = null;
+  function buildColorIdMap() {
+    if (_colorIdMap) return _colorIdMap;
+    _colorIdMap = {};
+    if (typeof BEAD_PALETTE !== 'undefined') {
+      for (const c of BEAD_PALETTE) _colorIdMap[c.id] = c;
+    }
+    return _colorIdMap;
+  }
+
+  // 取色用离屏 canvas（裁剪图原始分辨率），按 dataUrl 复用
+  let _imageSampleCanvas = null;
+  function ensureImageSampleCanvas() {
+    const img = state.croppedImage;
+    if (!img) return null;
+    if (_imageSampleCanvas && _imageSampleCanvas._src === state.croppedDataUrl) {
+      return _imageSampleCanvas;
+    }
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, 0, 0);
+    c._src = state.croppedDataUrl;
+    _imageSampleCanvas = c;
+    return c;
+  }
+
+  // ── 调色板 ──
+  let _paletteBuilt = false;
+  function ensurePaletteBuilt() {
+    if (_paletteBuilt) return;
+    buildPalette();
+    _paletteBuilt = true;
+  }
+
+  function buildPalette() {
+    const container = els.palette;
+    if (!container) return;
+    container.innerHTML = '';
+    if (typeof BEAD_PALETTE === 'undefined') return;
+
+    // 按首字母分组，保持出现顺序
+    const groups = {};
+    const order = [];
+    for (const c of BEAD_PALETTE) {
+      const g = c.id.charAt(0);
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(c);
+    }
+
+    for (const g of order) {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'bp-palette-group';
+
+      const title = document.createElement('div');
+      title.className = 'bp-palette-group-title';
+      title.textContent = g;
+
+      const row = document.createElement('div');
+      row.className = 'bp-palette-row';
+      for (const c of groups[g]) {
+        const sw = document.createElement('button');
+        sw.className = 'bp-swatch';
+        sw.dataset.id = c.id;
+        sw.style.background = c.hex;
+        sw.title = c.id;
+        sw.addEventListener('click', () => {
+          state.activeColorId = c.id;
+          updateCurrentColorDisplay();
+          renderPaletteActive();
+          saveCache();
+          closePaletteModal();
+        });
+        row.appendChild(sw);
+      }
+
+      groupEl.appendChild(title);
+      groupEl.appendChild(row);
+      container.appendChild(groupEl);
+    }
+    renderPaletteActive();
+  }
+
+  function renderPaletteActive() {
+    const id = state.activeColorId;
+    if (!els.palette) return;
+    els.palette.querySelectorAll('.bp-swatch').forEach((sw) => {
+      sw.classList.toggle('active', sw.dataset.id === id);
+    });
+  }
+
+  function updateCurrentColorDisplay() {
+    const c = buildColorIdMap()[state.activeColorId];
+    if (c) {
+      els.currentSwatch.style.background = c.hex;
+      els.currentId.textContent = c.id;
+    } else {
+      els.currentSwatch.style.background = '#ccc';
+      els.currentId.textContent = '—';
+    }
+  }
+
+  function updateCraftToolButtons() {
+    els.craftBtns.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.craft === state.craftTool);
+    });
+  }
+
+  function switchCraftTool(tool) {
+    state.craftTool = tool;
+    craftDrag = null;
+    updateCraftToolButtons();
+    saveCache();
+  }
+
+  function openPaletteModal() {
+    ensurePaletteBuilt();
+    els.paletteModal.hidden = false;
+  }
+
+  function closePaletteModal() {
+    els.paletteModal.hidden = true;
+  }
+
+  function openResetModal() {
+    els.resetModal.hidden = false;
+  }
+
+  function closeResetModal() {
+    els.resetModal.hidden = true;
+  }
+
+  function confirmReset() {
+    closeResetModal();
+    restart();
+  }
+
+  // ── 命中检测：屏幕坐标 → 格子 ──
+  function pointerCellHit(clientX, clientY) {
+    const rect = els.canvasWrapper.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const { cw, ch } = getWrapperSize();
+    return cellAtCanvas(x, y, cw, ch);
+  }
+
+  // canvas 坐标 → 命中的格子，越界返回 null
+  function cellAtCanvas(x, y, cw, ch) {
+    if (!state.gridGenerated || state.gridW <= 0 || state.gridH <= 0) return null;
+    const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
+    if (cellSize <= 0) return null;
+    const col = Math.floor((x - gx0) / cellSize);
+    const row = Math.floor((y - gy0) / cellSize);
+    if (col < 0 || col >= state.gridW || row < 0 || row >= state.gridH) return null;
+    return { row, col };
+  }
+
+  // 用当前工具作用于一个格子，返回是否发生变化
+  function applyCraftToCell(row, col) {
+    const key = row + ',' + col;
+    if (state.craftTool === 'paint') {
+      if (state.gridPaint[key] === state.activeColorId) return false;
+      state.gridPaint[key] = state.activeColorId;
+      return true;
+    }
+    if (state.craftTool === 'erase') {
+      if (!(key in state.gridPaint)) return false;
+      delete state.gridPaint[key];
+      return true;
+    }
+    return false;
+  }
+
+  // ── 涂色 / 橡皮 / 移动（拖拽） ──
+  function onCraftStart(clientX, clientY) {
+    // 吸色：单击取色，不进入拖拽
+    if (state.craftTool === 'pick') {
+      pickCellAt(clientX, clientY);
+      return;
+    }
+    // 移动：整体平移图纸 + 网格（保持两者相对对齐）
+    if (state.craftTool === 'move') {
+      craftDrag = {
+        type: 'move',
+        startX: clientX, startY: clientY,
+        imgOffX: state.imageOffX, imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX, gridOffY: state.gridOffY,
+      };
+      return;
+    }
+    // 涂色 / 橡皮：进入笔画（记录撤销快照）
+    const hit = pointerCellHit(clientX, clientY);
+    if (!hit) return;
+    craftDrag = {
+      type: 'stroke',
+      lastKey: null,
+      preSnapshot: deepCopyPaint(),
+      pushed: false,
+    };
+    strokeApply(hit.row, hit.col);
+  }
+
+  function onCraftMove(clientX, clientY) {
+    if (!craftDrag) return;
+    if (craftDrag.type === 'move') {
+      const dx = clientX - craftDrag.startX;
+      const dy = clientY - craftDrag.startY;
+      state.imageOffX = craftDrag.imgOffX + dx;
+      state.imageOffY = craftDrag.imgOffY + dy;
+      state.gridOffX = craftDrag.gridOffX + dx;
+      state.gridOffY = craftDrag.gridOffY + dy;
+      renderCreationCanvas();
+      return;
+    }
+    if (craftDrag.type === 'stroke') {
+      const hit = pointerCellHit(clientX, clientY);
+      if (!hit) return;
+      strokeApply(hit.row, hit.col);
+    }
+  }
+
+  // 笔画内：涂/擦一个格子，首次有效改动时压入撤销快照
+  function strokeApply(row, col) {
+    const key = row + ',' + col;
+    if (key === craftDrag.lastKey) return;
+    craftDrag.lastKey = key;
+    const changed = applyCraftToCell(row, col);
+    if (changed && !craftDrag.pushed) {
+      paintHistory.push(craftDrag.preSnapshot);
+      craftDrag.pushed = true;
+      if (paintHistory.length > 50) paintHistory.shift();
+    }
+    if (changed) renderCreationCanvas();
+  }
+
+  function onCraftEnd() {
+    if (craftDrag) {
+      if (craftDrag.type === 'move' || craftDrag.pushed) saveCache();
+      craftDrag = null;
+    }
+  }
+
+  function deepCopyPaint() {
+    return JSON.parse(JSON.stringify(state.gridPaint));
+  }
+
+  // 撤销最近一次涂色/擦除笔画
+  function undoPaint() {
+    if (!paintHistory.length) {
+      toast('没有可撤销的操作');
+      return;
+    }
+    state.gridPaint = paintHistory.pop();
+    renderCreationCanvas();
+    saveCache();
+  }
+
+  // 步骤 4 触屏（单指：涂色拖拽 / 吸色单击）
+  function onCraftTouchStart(e) {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    onCraftStart(t.clientX, t.clientY);
+  }
+  function onCraftTouchMove(e) {
+    if (!craftDrag || e.touches.length !== 1) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    onCraftMove(t.clientX, t.clientY);
+  }
+  function onCraftTouchEnd(e) {
+    if (e.touches.length === 0) onCraftEnd();
+  }
+
+  // ── 吸色：取格子覆盖图片区域的平均色 → 匹配最近 beadColor ──
+  function pickCellAt(clientX, clientY) {
+    const hit = pointerCellHit(clientX, clientY);
+    if (!hit) return;
+    const img = state.croppedImage;
+    if (!img) return;
+    const sample = ensureImageSampleCanvas();
+    if (!sample) return;
+
+    const { cw, ch } = getWrapperSize();
+    const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
+    // 格子中心 canvas 坐标
+    const ccx = gx0 + (hit.col + 0.5) * cellSize;
+    const ccy = gy0 + (hit.row + 0.5) * cellSize;
+    // 反算图片像素坐标（与 drawImageAndGrid 的正向变换互逆）
+    const icx = cw / 2 + state.imageOffX;
+    const icy = ch / 2 + state.imageOffY;
+    const imgPxX = (ccx - icx) / state.imageScale + img.width / 2;
+    const imgPxY = (ccy - icy) / state.imageScale + img.height / 2;
+    // 采样区域 = 一个格子在图片像素里的尺寸
+    const cellImg = cellSize / state.imageScale;
+    const sx = Math.max(0, Math.round(imgPxX - cellImg / 2));
+    const sy = Math.max(0, Math.round(imgPxY - cellImg / 2));
+    const ex = Math.min(img.width, Math.round(imgPxX + cellImg / 2));
+    const ey = Math.min(img.height, Math.round(imgPxY + cellImg / 2));
+    if (ex - sx < 1 || ey - sy < 1) {
+      toast('该格子不在图片范围内');
+      return;
+    }
+
+    const data = sample.getContext('2d').getImageData(sx, sy, ex - sx, ey - sy).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+    }
+    if (n === 0) { toast('该格子不在图片范围内'); return; }
+    const best = findClosestBeadColor(Math.round(r / n), Math.round(g / n), Math.round(b / n));
+    if (best) {
+      state.activeColorId = best.id;
+      updateCurrentColorDisplay();
+      renderPaletteActive();
+      saveCache();
+      toast('已匹配颜色 ' + best.id);
+    }
+  }
+
+  // redmean 加权欧氏距离匹配最近 beadColor
+  function findClosestBeadColor(r, g, b) {
+    if (typeof BEAD_PALETTE === 'undefined') return null;
+    let best = null, bestDist = Infinity;
+    for (const c of BEAD_PALETTE) {
+      const rmean = (r + c.r) / 2;
+      const dr = r - c.r, dg = g - c.g, db = b - c.b;
+      const dist =
+        (2 + rmean / 256) * dr * dr +
+        4 * dg * dg +
+        (2 + (255 - rmean) / 256) * db * db;
+      if (dist < bestDist) { bestDist = dist; best = c; }
+    }
+    return best;
   }
 
   // ── 生成网格 ──
@@ -645,14 +1174,17 @@ const BlueprintApp = (() => {
     state.gridGenerated = true;
     state.currentMode = 'image';
     els.modeToggle.hidden = false;
+    els.startCraft.hidden = false;
     updateModeButtons();
     renderAlignmentCanvas();
+    saveCache();
   }
 
   // ── 模式切换 ──
   function switchMode(mode) {
     state.currentMode = mode;
     updateModeButtons();
+    saveCache();
   }
 
   function updateModeButtons() {
@@ -731,6 +1263,7 @@ const BlueprintApp = (() => {
   function onAlignTouchEnd(e) {
     if (e.touches.length === 0) {
       alignDrag = null;
+      saveCache();
     } else if (e.touches.length === 1 && alignDrag && alignDrag.type === 'pinch') {
       alignDrag = {
         type: 'drag',
@@ -758,9 +1291,11 @@ const BlueprintApp = (() => {
 
   function resetImage() {
     state.originalImage = null;
+    state.originalDataUrl = null;
     state.originalWidth = 0;
     state.originalHeight = 0;
     state.croppedImage = null;
+    state.croppedDataUrl = null;
     state.cropFrame = { x: 0, y: 0, w: 0, h: 0 };
     state.imgPanX = 0;
     state.imgPanY = 0;
@@ -772,15 +1307,22 @@ const BlueprintApp = (() => {
     state.gridOffX = 0;
     state.gridOffY = 0;
     state.gridScale = 1;
+    state.gridPaint = {};
+    state.craftTool = 'paint';
+    _imageSampleCanvas = null;
+    paintHistory = [];
     cropDrag = null;
     imgTouch = null;
     alignDrag = null;
     imgMousePan = null;
+    craftDrag = null;
 
     els.uploadZone.hidden = false;
     els.canvasContainer.hidden = true;
     els.modeToggle.hidden = true;
+    els.startCraft.hidden = true;
 
+    clearCache();
     setStep(1);
   }
 
@@ -830,7 +1372,29 @@ const BlueprintApp = (() => {
     els.modeBtns.forEach((btn) =>
       btn.addEventListener('click', () => switchMode(btn.dataset.mode))
     );
-    els.restart.addEventListener('click', restart);
+    els.restart.addEventListener('click', openResetModal);
+
+    // 步骤 4：创作
+    els.startCraft.addEventListener('click', () => {
+      if (!state.gridGenerated) { toast('请先生成网格'); return; }
+      setStep(4);
+    });
+    els.craftBtns.forEach((btn) =>
+      btn.addEventListener('click', () => switchCraftTool(btn.dataset.craft))
+    );
+    els.currentColor.addEventListener('click', openPaletteModal);
+    els.paletteClose.addEventListener('click', closePaletteModal);
+    els.paletteModal.addEventListener('click', (e) => {
+      if (e.target === els.paletteModal) closePaletteModal();
+    });
+    els.undo.addEventListener('click', undoPaint);
+    els.resetCancel.addEventListener('click', closeResetModal);
+    els.resetConfirm.addEventListener('click', confirmReset);
+    els.resetModal.addEventListener('click', (e) => {
+      if (e.target === els.resetModal) closeResetModal();
+    });
+    els.backToAlign.addEventListener('click', () => setStep(3));
+    els.restart2.addEventListener('click', openResetModal);
 
     // ── 步骤 2：裁剪框事件（mouse + touch） ──
     els.cropRect.addEventListener('mousedown', onFrameMouseDown);
@@ -858,20 +1422,24 @@ const BlueprintApp = (() => {
       if (state.step === 2) onCanvasWheel(e);
     }, { passive: false });
 
-    // ── 步骤 3：触屏对齐 ──
+    // ── 步骤 3/4：触屏 ──
     els.canvasWrapper.addEventListener('touchstart', (e) => {
       if (state.step === 3) onAlignTouchStart(e);
+      else if (state.step === 4) onCraftTouchStart(e);
     }, { passive: false });
     els.canvasWrapper.addEventListener('touchmove', (e) => {
       if (state.step === 3) onAlignTouchMove(e);
+      else if (state.step === 4) onCraftTouchMove(e);
     }, { passive: false });
     els.canvasWrapper.addEventListener('touchend', (e) => {
       if (state.step === 3) onAlignTouchEnd(e);
+      else if (state.step === 4) onCraftTouchEnd(e);
     });
 
-    // ── 步骤 3：鼠标对齐 + 滚轮 ──
+    // ── 步骤 3/4：鼠标 ──
     els.canvas.addEventListener('mousedown', (e) => {
       if (state.step === 3) onAlignMouseDown(e);
+      else if (state.step === 4) onCraftStart(e.clientX, e.clientY);
     });
     els.canvas.addEventListener('wheel', (e) => {
       if (state.step === 3) onCanvasWheel(e);
