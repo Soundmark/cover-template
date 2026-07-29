@@ -16,7 +16,7 @@
   <!-- Tab 导航 -->
   <nav class="tab-nav">
     <button class="tab-btn active" data-tab="cover">封面制作</button>
-    <button class="tab-btn" data-tab="blueprint">图纸尺寸识别</button>
+    <button class="tab-btn" data-tab="blueprint">图纸创作</button>
   </nav>
 
   <!-- 图纸尺寸识别工作区 -->
@@ -35,6 +35,10 @@
         <div class="bp-step" data-step="3">
           <span class="bp-step-num">3</span>
           <span class="bp-step-label">对齐网格</span>
+        </div>
+        <div class="bp-step" data-step="4">
+          <span class="bp-step-num">4</span>
+          <span class="bp-step-label">创作</span>
         </div>
       </div>
 
@@ -82,22 +86,48 @@
 
           <!-- 步骤3: 对齐网格 -->
           <div class="bp-action-step" id="bp-action-step3" hidden>
-            <div class="bp-grid-inputs">
-              <label>格子数</label>
-              <div class="bp-grid-input-row">
-                <input type="number" id="bp-grid-w" min="1" placeholder="宽" />
-                <span class="bp-grid-input-x">×</span>
-                <input type="number" id="bp-grid-h" min="1" placeholder="高" />
+            <div class="bp-grid-controls">
+              <div class="bp-grid-inputs">
+                <label>格子数</label>
+                <div class="bp-grid-input-row">
+                  <input type="number" id="bp-grid-w" min="1" placeholder="宽" />
+                  <span class="bp-grid-input-x">×</span>
+                  <input type="number" id="bp-grid-h" min="1" placeholder="高" />
+                </div>
               </div>
+              <button class="btn primary" id="bp-generate-grid">生成网格</button>
             </div>
-            <button class="btn primary" id="bp-generate-grid">生成网格</button>
             <div class="bp-mode-toggle" id="bp-mode-toggle" hidden>
-              <button class="btn small mode-btn active" data-mode="image">🖐 调整图纸</button>
-              <button class="btn small mode-btn" data-mode="grid">⊞ 调整网格</button>
-              <button class="btn small mode-btn" data-mode="all">⇱ 整体移动</button>
+              <button class="btn small mode-btn active" data-mode="image">图纸</button>
+              <button class="btn small mode-btn" data-mode="grid">网格</button>
+              <button class="btn small mode-btn" data-mode="all">整体</button>
             </div>
             <p class="hint">单指拖拽移动 · 双指缩放大小</p>
-            <button class="btn" id="bp-restart">重新开始</button>
+            <div class="bp-action-row">
+              <button class="btn primary" id="bp-start-craft" hidden>进入创作</button>
+              <button class="btn" id="bp-restart">重新开始</button>
+            </div>
+          </div>
+
+          <!-- 步骤4: 创作 -->
+          <div class="bp-action-step" id="bp-action-step4" hidden>
+            <div class="bp-craft-tools" id="bp-craft-tools">
+              <button class="btn small craft-btn active" data-craft="paint">🖌 涂色</button>
+              <button class="btn small craft-btn" data-craft="pick">💧 吸色</button>
+              <button class="btn small craft-btn" data-craft="erase">🧹 橡皮</button>
+              <button class="btn small craft-btn" data-craft="move">✋ 移动</button>
+            </div>
+            <div class="bp-action-row">
+              <button class="btn small" id="bp-undo">↩ 撤销</button>
+              <button class="bp-current-color" id="bp-current-color" type="button">
+                <span class="bp-current-swatch" id="bp-current-swatch"></span>
+                <span class="bp-current-id" id="bp-current-id">—</span>
+              </button>
+            </div>
+            <div class="bp-action-row">
+              <button class="btn" id="bp-back-to-align">返回调整</button>
+              <button class="btn" id="bp-restart2">重新开始</button>
+            </div>
           </div>
         </div>
       </div>
@@ -332,9 +362,33 @@
     </div>
   </div>
 
+  <!-- 调色板弹窗 -->
+  <div id="bp-palette-modal" class="modal" hidden>
+    <div class="modal-content bp-palette-modal-content">
+      <h2>选择颜色</h2>
+      <div class="bp-palette" id="bp-palette"></div>
+      <div class="modal-actions">
+        <button id="bp-palette-close" class="btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 重置确认弹窗 -->
+  <div id="bp-reset-modal" class="modal" hidden>
+    <div class="modal-content">
+      <h2>确认重置</h2>
+      <p>将清除当前图片和所有涂色，是否继续？</p>
+      <div class="modal-actions">
+        <button id="bp-reset-cancel" class="btn">取消</button>
+        <button id="bp-reset-confirm" class="btn primary">确认重置</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 提示横幅 -->
   <div id="toast" class="toast" hidden></div>
 
+  <script src="beadColor.js"></script>
   <script src="blueprint.js"></script>
   <script src="app.js"></script>
 </body>
