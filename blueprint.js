@@ -35,6 +35,7 @@ const BlueprintApp = (() => {
     gridPaint: {},              // key "row,col" → beadColor id
     craftTool: 'paint',         // 'paint' | 'pick' | 'erase'
     activeColorId: 'A01',
+    previewMode: false,
   };
 
   // 裁剪框拖拽（handle resize + frame move）
@@ -178,6 +179,8 @@ const BlueprintApp = (() => {
       resetConfirm:     $('bp-reset-confirm'),
       backToAlign:      $('bp-back-to-align'),
       restart2:         $('bp-restart2'),
+      previewBtn:       $('bp-preview'),
+      exportBtn:        $('bp-export'),
     };
     bindEvents();
 
@@ -258,6 +261,7 @@ const BlueprintApp = (() => {
       ensurePaletteBuilt();
       updateCraftToolButtons();
       updateCurrentColorDisplay();
+      updatePreviewButton();
       requestAnimationFrame(() => renderCreationCanvas());
     }
 
@@ -545,10 +549,38 @@ const BlueprintApp = (() => {
       } else if (state.currentMode === 'grid') {
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       } else {
-        state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
-        state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
+        const factor = 1 + delta;
+        const newImgS = clamp(state.imageScale * factor, 0.05, 200);
+        const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+        const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+        state.imageScale = clamp(state.imageScale * f, 0.05, 200);
+        state.gridScale = clamp(state.gridScale * f, 0.05, 200);
+        const midX = (state.imageOffX + state.gridOffX) / 2;
+        const midY = (state.imageOffY + state.gridOffY) / 2;
+        state.imageOffX = midX + (state.imageOffX - midX) * f;
+        state.imageOffY = midY + (state.imageOffY - midY) * f;
+        state.gridOffX = midX + (state.gridOffX - midX) * f;
+        state.gridOffY = midY + (state.gridOffY - midY) * f;
       }
       renderAlignmentCanvas();
+      saveCacheDebounced();
+    }
+    if (state.step === 4 && state.craftTool === "move") {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.002;
+      const factor = 1 + delta;
+      const newImgS = clamp(state.imageScale * factor, 0.05, 200);
+      const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+      const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+      state.imageScale = clamp(state.imageScale * f, 0.05, 200);
+      state.gridScale = clamp(state.gridScale * f, 0.05, 200);
+      const midX = (state.imageOffX + state.gridOffX) / 2;
+      const midY = (state.imageOffY + state.gridOffY) / 2;
+      state.imageOffX = midX + (state.imageOffX - midX) * f;
+      state.imageOffY = midY + (state.imageOffY - midY) * f;
+      state.gridOffX = midX + (state.gridOffX - midX) * f;
+      state.gridOffY = midY + (state.gridOffY - midY) * f;
+      renderCreationCanvas();
       saveCacheDebounced();
     }
   }
@@ -726,12 +758,12 @@ const BlueprintApp = (() => {
     return { cellSize, gridPixelW, gridPixelH, gx0, gy0 };
   }
 
-  function drawGrid(ctx, cw, ch) {
+  function drawGrid(ctx, cw, ch, color) {
     const { gridW, gridH } = state;
     const { cellSize, gridPixelW, gridPixelH, gx0, gy0 } = getGridGeometry(cw, ch);
 
     ctx.save();
-    ctx.strokeStyle = '#ff2442';
+    ctx.strokeStyle = color || '#ff2442';
     ctx.lineWidth = 1.5;
 
     for (let i = 0; i <= gridW; i++) {
@@ -761,11 +793,32 @@ const BlueprintApp = (() => {
     if (cw <= 0 || ch <= 0) return;
 
     const ctx = setupCanvas(canvas, cw, ch);
-    drawImageAndGrid(ctx, cw, ch);
-    drawPaintedCells(ctx, cw, ch);
+
+    if (state.previewMode) {
+      // 预览模式：白色背景 + 涂色色块（无底图、无网格）
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, cw, ch);
+      drawPaintedCells(ctx, cw, ch);
+    } else {
+      drawImageAndGrid(ctx, cw, ch);
+      drawPaintedCells(ctx, cw, ch);
+      // 只在已涂色格子区域覆盖绿色网格线
+      {
+        const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
+        ctx.save();
+        ctx.beginPath();
+        for (const key in state.gridPaint) {
+          const [r, col] = key.split(",").map(Number);
+          ctx.rect(gx0 + col * cellSize, gy0 + r * cellSize, cellSize, cellSize);
+        }
+        ctx.clip();
+        drawGrid(ctx, cw, ch, '#2ecc40');
+        ctx.restore();
+      }
+    }
   }
 
-  // 绘制已涂色格子（半透明色块 + 浅边）
+  // 绘制已涂色格子（不透明色块 + 边框标记）
   function drawPaintedCells(ctx, cw, ch) {
     const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
     if (cellSize <= 0) return;
@@ -777,18 +830,20 @@ const BlueprintApp = (() => {
       const id = state.gridPaint[key];
       const c = colorMap[id];
       if (!c) continue;
-      const [r, col] = key.split(',').map(Number);
+      const [r, col] = key.split(",").map(Number);
       const x = gx0 + col * cellSize + pad;
       const y = gy0 + r * cellSize + pad;
       const s = cellSize - pad * 2;
+      // 不透明填充
       ctx.fillStyle = c.hex;
-      ctx.globalAlpha = 0.82;
       ctx.fillRect(x, y, s, s);
+      // 深色边框标记已涂色格子
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, s, s);
     }
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
-
   // ════════════════════════════════════════
   //  步骤 4：创作（涂色 / 吸色 / 橡皮）
   // ════════════════════════════════════════
@@ -1053,21 +1108,146 @@ const BlueprintApp = (() => {
     saveCache();
   }
 
+  // 切换预览模式
+  function togglePreview() {
+    state.previewMode = !state.previewMode;
+    updatePreviewButton();
+    renderCreationCanvas();
+    saveCache();
+  }
+
+  // 导出涂色结果为 PNG（按涂色区域裁剪，不受视口限制）
+  function exportPNG() {
+    const canvas = els.canvas;
+    if (!canvas || !state.croppedImage) return;
+    if (!state.gridGenerated || state.gridW <= 0 || state.gridH <= 0) return;
+
+    const keys = Object.keys(state.gridPaint);
+    if (!keys.length) { toast('没有已涂色的格子'); return; }
+
+    // 计算涂色格子的包围盒（行列范围）
+    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+    for (const key of keys) {
+      const [r, col] = key.split(',').map(Number);
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (col < minC) minC = col;
+      if (col > maxC) maxC = col;
+    }
+
+    // 用当前视口的 cellSize 作为基准，放大 4 倍提升导出清晰度
+    const { cw, ch } = getWrapperSize();
+    if (cw <= 0 || ch <= 0) return;
+    const { cellSize: baseCell } = getGridGeometry(cw, ch);
+    if (baseCell <= 0) return;
+    const scale = 4;
+    const cellSize = baseCell * scale;
+
+    const pad = Math.max(0, cellSize * 0.04);
+    const cols = maxC - minC + 1;
+    const rows = maxR - minR + 1;
+    const exportW = Math.round(cols * cellSize);
+    const exportH = Math.round(rows * cellSize);
+
+    const tmp = document.createElement('canvas');
+    tmp.width = exportW;
+    tmp.height = exportH;
+    const tctx = tmp.getContext('2d');
+
+    // 白色背景
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, exportW, exportH);
+
+    // 涂色格子
+    const colorMap = buildColorIdMap();
+    for (const key of keys) {
+      const id = state.gridPaint[key];
+      const c = colorMap[id];
+      if (!c) continue;
+      const [r, col] = key.split(',').map(Number);
+      const x = (col - minC) * cellSize + pad;
+      const y = (r - minR) * cellSize + pad;
+      const s = cellSize - pad * 2;
+      tctx.fillStyle = c.hex;
+      tctx.fillRect(x, y, s, s);
+    }
+
+    tmp.toBlob((blob) => {
+      if (!blob) { toast('导出失败'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'craft-' + new Date().toISOString().slice(0, 10) + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('导出成功');
+    }, 'image/png');
+  }
+
+  function updatePreviewButton() {
+    if (els.previewBtn) {
+      els.previewBtn.classList.toggle("active", state.previewMode);
+    }
+  }
+
   // 步骤 4 触屏（单指：涂色拖拽 / 吸色单击）
   function onCraftTouchStart(e) {
+    // 移动模式双指缩放
+    if (state.craftTool === "move" && e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      craftDrag = {
+        type: "pinch",
+        dist: Math.hypot(dx, dy),
+        imgScale: state.imageScale,
+        gridScale: state.gridScale,
+        imgOffX: state.imageOffX,
+        imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX,
+        gridOffY: state.gridOffY,
+      };
+      return;
+    }
     if (e.touches.length !== 1) return;
     e.preventDefault();
     const t = e.touches[0];
     onCraftStart(t.clientX, t.clientY);
   }
   function onCraftTouchMove(e) {
+    // 双指缩放
+    if (craftDrag && craftDrag.type === "pinch" && e.touches.length >= 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const nd = Math.hypot(dx, dy);
+      const ratio = nd / craftDrag.dist;
+      const newImgS3 = clamp(craftDrag.imgScale * ratio, 0.05, 200);
+      const newGrdS3 = clamp(craftDrag.gridScale * ratio, 0.05, 200);
+      const r = Math.min(newImgS3 / craftDrag.imgScale, newGrdS3 / craftDrag.gridScale);
+      state.imageScale = clamp(craftDrag.imgScale * r, 0.05, 200);
+      state.gridScale = clamp(craftDrag.gridScale * r, 0.05, 200);
+      const midX = (craftDrag.imgOffX + craftDrag.gridOffX) / 2;
+      const midY = (craftDrag.imgOffY + craftDrag.gridOffY) / 2;
+      state.imageOffX = midX + (craftDrag.imgOffX - midX) * r;
+      state.imageOffY = midY + (craftDrag.imgOffY - midY) * r;
+      state.gridOffX = midX + (craftDrag.gridOffX - midX) * r;
+      state.gridOffY = midY + (craftDrag.gridOffY - midY) * r;
+      renderCreationCanvas();
+      return;
+    }
     if (!craftDrag || e.touches.length !== 1) return;
     e.preventDefault();
     const t = e.touches[0];
     onCraftMove(t.clientX, t.clientY);
   }
   function onCraftTouchEnd(e) {
-    if (e.touches.length === 0) onCraftEnd();
+    if (e.touches.length === 0) {
+      if (craftDrag && craftDrag.type === "pinch") saveCache();
+      onCraftEnd();
+    }
   }
 
   // ── 吸色：取格子覆盖图片区域的平均色 → 匹配最近 beadColor ──
@@ -1215,6 +1395,10 @@ const BlueprintApp = (() => {
         dist: Math.hypot(dx, dy),
         imgScale: state.imageScale,
         gridScale: state.gridScale,
+        imgOffX: state.imageOffX,
+        imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX,
+        gridOffY: state.gridOffY,
       };
     }
   }
@@ -1250,12 +1434,25 @@ const BlueprintApp = (() => {
       } else if (state.currentMode === 'grid') {
         state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
       } else {
-        state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
-        state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
+        const newImgS2 = clamp(alignDrag.imgScale * ratio, 0.05, 200);
+        const newGrdS2 = clamp(alignDrag.gridScale * ratio, 0.05, 200);
+        const r = Math.min(newImgS2 / alignDrag.imgScale, newGrdS2 / alignDrag.gridScale);
+        state.imageScale = clamp(alignDrag.imgScale * r, 0.05, 200);
+        state.gridScale = clamp(alignDrag.gridScale * r, 0.05, 200);
+        const midX = (alignDrag.imgOffX + alignDrag.gridOffX) / 2;
+        const midY = (alignDrag.imgOffY + alignDrag.gridOffY) / 2;
+        state.imageOffX = midX + (alignDrag.imgOffX - midX) * r;
+        state.imageOffY = midY + (alignDrag.imgOffY - midY) * r;
+        state.gridOffX = midX + (alignDrag.gridOffX - midX) * r;
+        state.gridOffY = midY + (alignDrag.gridOffY - midY) * r;
       }
       alignDrag.dist = nd;
       alignDrag.imgScale = state.imageScale;
       alignDrag.gridScale = state.gridScale;
+      alignDrag.imgOffX = state.imageOffX;
+      alignDrag.imgOffY = state.imageOffY;
+      alignDrag.gridOffX = state.gridOffX;
+      alignDrag.gridOffY = state.gridOffY;
       renderAlignmentCanvas();
     }
   }
@@ -1395,6 +1592,8 @@ const BlueprintApp = (() => {
     });
     els.backToAlign.addEventListener('click', () => setStep(3));
     els.restart2.addEventListener('click', openResetModal);
+    els.previewBtn.addEventListener('click', togglePreview);
+    els.exportBtn.addEventListener('click', exportPNG);
 
     // ── 步骤 2：裁剪框事件（mouse + touch） ──
     els.cropRect.addEventListener('mousedown', onFrameMouseDown);
@@ -1442,7 +1641,7 @@ const BlueprintApp = (() => {
       else if (state.step === 4) onCraftStart(e.clientX, e.clientY);
     });
     els.canvas.addEventListener('wheel', (e) => {
-      if (state.step === 3) onCanvasWheel(e);
+      if (state.step === 3 || state.step === 4) onCanvasWheel(e);
     }, { passive: false });
 
     // ── 全局 ──

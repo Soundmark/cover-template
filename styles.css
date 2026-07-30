@@ -807,16 +807,21 @@ body {
 }
 
 /* ============ 步骤4：创作 ============ */
-.bp-action-step4 {
+.bp-craft-tools {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.bp-craft-tools {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.bp-craft-row {
+  display: flex;
   gap: 6px;
+}
+
+.bp-craft-row .btn,
+.bp-craft-row .bp-current-color {
+  flex: 1;
+  min-width: 0;
 }
 
 .craft-btn {
@@ -826,6 +831,13 @@ body {
 }
 
 .craft-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* 预览按钮激活态 */
+#bp-preview.active {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
@@ -980,13 +992,13 @@ body {
   }
 
   /* 步骤4：移动端占满一行 */
-  .bp-action-step4 {
+  #bp-action-step4 {
     flex-basis: 100%;
     min-width: 0;
     gap: 6px;
   }
 
-  .bp-action-step4 .btn {
+  #bp-action-step4 .btn {
     font-size: 13px;
     padding: 8px 12px;
   }
