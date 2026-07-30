@@ -548,8 +548,9 @@ const BlueprintApp = (() => {
       } else if (state.currentMode === 'grid') {
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       } else {
-        state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
-        state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
+        const factor = 1 + delta;
+        state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
+        state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
       }
       renderAlignmentCanvas();
       saveCacheDebounced();
@@ -557,8 +558,9 @@ const BlueprintApp = (() => {
     if (state.step === 4 && state.craftTool === "move") {
       e.preventDefault();
       const delta = -e.deltaY * 0.002;
-      state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
-      state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
+      const factor = 1 + delta;
+      state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
+      state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
       renderCreationCanvas();
       saveCacheDebounced();
     }
