@@ -549,8 +549,11 @@ const BlueprintApp = (() => {
         state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
       } else {
         const factor = 1 + delta;
-        state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
-        state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
+        const newImgS = clamp(state.imageScale * factor, 0.05, 200);
+        const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+        const actualFactor = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+        state.imageScale = clamp(state.imageScale * actualFactor, 0.05, 200);
+        state.gridScale = clamp(state.gridScale * actualFactor, 0.05, 200);
       }
       renderAlignmentCanvas();
       saveCacheDebounced();
@@ -559,8 +562,11 @@ const BlueprintApp = (() => {
       e.preventDefault();
       const delta = -e.deltaY * 0.002;
       const factor = 1 + delta;
-      state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
-      state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
+      const newImgS = clamp(state.imageScale * factor, 0.05, 200);
+      const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+      const actualFactor = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+      state.imageScale = clamp(state.imageScale * actualFactor, 0.05, 200);
+      state.gridScale = clamp(state.gridScale * actualFactor, 0.05, 200);
       renderCreationCanvas();
       saveCacheDebounced();
     }
@@ -1118,8 +1124,11 @@ const BlueprintApp = (() => {
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const nd = Math.hypot(dx, dy);
       const ratio = nd / craftDrag.dist;
-      state.imageScale = clamp(craftDrag.imgScale * ratio, 0.05, 20);
-      state.gridScale = clamp(craftDrag.gridScale * ratio, 0.05, 20);
+      const newImgS3 = clamp(craftDrag.imgScale * ratio, 0.05, 200);
+      const newGrdS3 = clamp(craftDrag.gridScale * ratio, 0.05, 200);
+      const actualRatio2 = Math.min(newImgS3 / craftDrag.imgScale, newGrdS3 / craftDrag.gridScale);
+      state.imageScale = clamp(craftDrag.imgScale * actualRatio2, 0.05, 200);
+      state.gridScale = clamp(craftDrag.gridScale * actualRatio2, 0.05, 200);
       renderCreationCanvas();
       return;
     }
@@ -1315,8 +1324,11 @@ const BlueprintApp = (() => {
       } else if (state.currentMode === 'grid') {
         state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
       } else {
-        state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
-        state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
+        const newImgS2 = clamp(alignDrag.imgScale * ratio, 0.05, 200);
+        const newGrdS2 = clamp(alignDrag.gridScale * ratio, 0.05, 200);
+        const actualRatio = Math.min(newImgS2 / alignDrag.imgScale, newGrdS2 / alignDrag.gridScale);
+        state.imageScale = clamp(alignDrag.imgScale * actualRatio, 0.05, 200);
+        state.gridScale = clamp(alignDrag.gridScale * actualRatio, 0.05, 200);
       }
       alignDrag.dist = nd;
       alignDrag.imgScale = state.imageScale;
