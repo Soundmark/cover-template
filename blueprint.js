@@ -551,9 +551,15 @@ const BlueprintApp = (() => {
         const factor = 1 + delta;
         const newImgS = clamp(state.imageScale * factor, 0.05, 200);
         const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
-        const actualFactor = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
-        state.imageScale = clamp(state.imageScale * actualFactor, 0.05, 200);
-        state.gridScale = clamp(state.gridScale * actualFactor, 0.05, 200);
+        const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+        state.imageScale = clamp(state.imageScale * f, 0.05, 200);
+        state.gridScale = clamp(state.gridScale * f, 0.05, 200);
+        const midX = (state.imageOffX + state.gridOffX) / 2;
+        const midY = (state.imageOffY + state.gridOffY) / 2;
+        state.imageOffX = midX + (state.imageOffX - midX) * f;
+        state.imageOffY = midY + (state.imageOffY - midY) * f;
+        state.gridOffX = midX + (state.gridOffX - midX) * f;
+        state.gridOffY = midY + (state.gridOffY - midY) * f;
       }
       renderAlignmentCanvas();
       saveCacheDebounced();
@@ -564,9 +570,15 @@ const BlueprintApp = (() => {
       const factor = 1 + delta;
       const newImgS = clamp(state.imageScale * factor, 0.05, 200);
       const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
-      const actualFactor = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
-      state.imageScale = clamp(state.imageScale * actualFactor, 0.05, 200);
-      state.gridScale = clamp(state.gridScale * actualFactor, 0.05, 200);
+      const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
+      state.imageScale = clamp(state.imageScale * f, 0.05, 200);
+      state.gridScale = clamp(state.gridScale * f, 0.05, 200);
+      const midX = (state.imageOffX + state.gridOffX) / 2;
+      const midY = (state.imageOffY + state.gridOffY) / 2;
+      state.imageOffX = midX + (state.imageOffX - midX) * f;
+      state.imageOffY = midY + (state.imageOffY - midY) * f;
+      state.gridOffX = midX + (state.gridOffX - midX) * f;
+      state.gridOffY = midY + (state.gridOffY - midY) * f;
       renderCreationCanvas();
       saveCacheDebounced();
     }
@@ -1108,6 +1120,10 @@ const BlueprintApp = (() => {
         dist: Math.hypot(dx, dy),
         imgScale: state.imageScale,
         gridScale: state.gridScale,
+        imgOffX: state.imageOffX,
+        imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX,
+        gridOffY: state.gridOffY,
       };
       return;
     }
@@ -1126,9 +1142,15 @@ const BlueprintApp = (() => {
       const ratio = nd / craftDrag.dist;
       const newImgS3 = clamp(craftDrag.imgScale * ratio, 0.05, 200);
       const newGrdS3 = clamp(craftDrag.gridScale * ratio, 0.05, 200);
-      const actualRatio2 = Math.min(newImgS3 / craftDrag.imgScale, newGrdS3 / craftDrag.gridScale);
-      state.imageScale = clamp(craftDrag.imgScale * actualRatio2, 0.05, 200);
-      state.gridScale = clamp(craftDrag.gridScale * actualRatio2, 0.05, 200);
+      const r = Math.min(newImgS3 / craftDrag.imgScale, newGrdS3 / craftDrag.gridScale);
+      state.imageScale = clamp(craftDrag.imgScale * r, 0.05, 200);
+      state.gridScale = clamp(craftDrag.gridScale * r, 0.05, 200);
+      const midX = (craftDrag.imgOffX + craftDrag.gridOffX) / 2;
+      const midY = (craftDrag.imgOffY + craftDrag.gridOffY) / 2;
+      state.imageOffX = midX + (craftDrag.imgOffX - midX) * r;
+      state.imageOffY = midY + (craftDrag.imgOffY - midY) * r;
+      state.gridOffX = midX + (craftDrag.gridOffX - midX) * r;
+      state.gridOffY = midY + (craftDrag.gridOffY - midY) * r;
       renderCreationCanvas();
       return;
     }
@@ -1289,6 +1311,10 @@ const BlueprintApp = (() => {
         dist: Math.hypot(dx, dy),
         imgScale: state.imageScale,
         gridScale: state.gridScale,
+        imgOffX: state.imageOffX,
+        imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX,
+        gridOffY: state.gridOffY,
       };
     }
   }
@@ -1326,13 +1352,23 @@ const BlueprintApp = (() => {
       } else {
         const newImgS2 = clamp(alignDrag.imgScale * ratio, 0.05, 200);
         const newGrdS2 = clamp(alignDrag.gridScale * ratio, 0.05, 200);
-        const actualRatio = Math.min(newImgS2 / alignDrag.imgScale, newGrdS2 / alignDrag.gridScale);
-        state.imageScale = clamp(alignDrag.imgScale * actualRatio, 0.05, 200);
-        state.gridScale = clamp(alignDrag.gridScale * actualRatio, 0.05, 200);
+        const r = Math.min(newImgS2 / alignDrag.imgScale, newGrdS2 / alignDrag.gridScale);
+        state.imageScale = clamp(alignDrag.imgScale * r, 0.05, 200);
+        state.gridScale = clamp(alignDrag.gridScale * r, 0.05, 200);
+        const midX = (alignDrag.imgOffX + alignDrag.gridOffX) / 2;
+        const midY = (alignDrag.imgOffY + alignDrag.gridOffY) / 2;
+        state.imageOffX = midX + (alignDrag.imgOffX - midX) * r;
+        state.imageOffY = midY + (alignDrag.imgOffY - midY) * r;
+        state.gridOffX = midX + (alignDrag.gridOffX - midX) * r;
+        state.gridOffY = midY + (alignDrag.gridOffY - midY) * r;
       }
       alignDrag.dist = nd;
       alignDrag.imgScale = state.imageScale;
       alignDrag.gridScale = state.gridScale;
+      alignDrag.imgOffX = state.imageOffX;
+      alignDrag.imgOffY = state.imageOffY;
+      alignDrag.gridOffX = state.gridOffX;
+      alignDrag.gridOffY = state.gridOffY;
       renderAlignmentCanvas();
     }
   }
