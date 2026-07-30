@@ -112,17 +112,20 @@
           <!-- 步骤4: 创作 -->
           <div class="bp-action-step" id="bp-action-step4" hidden>
             <div class="bp-craft-tools" id="bp-craft-tools">
-              <button class="btn small craft-btn active" data-craft="paint">🖌 涂色</button>
-              <button class="btn small craft-btn" data-craft="pick">💧 吸色</button>
-              <button class="btn small craft-btn" data-craft="erase">🧹 橡皮</button>
-              <button class="btn small craft-btn" data-craft="move">✋ 移动</button>
-            </div>
-            <div class="bp-action-row">
-              <button class="btn small" id="bp-undo">↩ 撤销</button>
-              <button class="bp-current-color" id="bp-current-color" type="button">
-                <span class="bp-current-swatch" id="bp-current-swatch"></span>
-                <span class="bp-current-id" id="bp-current-id">—</span>
-              </button>
+              <div class="bp-craft-row">
+                <button class="btn small craft-btn active" data-craft="paint">🖌 涂色</button>
+                <button class="btn small craft-btn" data-craft="pick">💧 吸色</button>
+                <button class="btn small craft-btn" data-craft="erase">🧹 橡皮</button>
+              </div>
+              <div class="bp-craft-row">
+                <button class="btn small craft-btn" data-craft="move">✋ 移动</button>
+                <button class="btn small" id="bp-undo">↩ 撤销</button>
+                <button class="bp-current-color" id="bp-current-color" type="button">
+                  <span class="bp-current-swatch" id="bp-current-swatch"></span>
+                  <span class="bp-current-id" id="bp-current-id">—</span>
+                </button>
+                <button class="btn small" id="bp-preview">👁 预览</button>
+              </div>
             </div>
             <div class="bp-action-row">
               <button class="btn" id="bp-back-to-align">返回调整</button>

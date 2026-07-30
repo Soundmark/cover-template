@@ -35,6 +35,7 @@ const BlueprintApp = (() => {
     gridPaint: {},              // key "row,col" → beadColor id
     craftTool: 'paint',         // 'paint' | 'pick' | 'erase'
     activeColorId: 'A01',
+    previewMode: false,
   };
 
   // 裁剪框拖拽（handle resize + frame move）
@@ -178,6 +179,7 @@ const BlueprintApp = (() => {
       resetConfirm:     $('bp-reset-confirm'),
       backToAlign:      $('bp-back-to-align'),
       restart2:         $('bp-restart2'),
+      previewBtn:       $('bp-preview'),
     };
     bindEvents();
 
@@ -258,6 +260,7 @@ const BlueprintApp = (() => {
       ensurePaletteBuilt();
       updateCraftToolButtons();
       updateCurrentColorDisplay();
+      updatePreviewButton();
       requestAnimationFrame(() => renderCreationCanvas());
     }
 
@@ -551,6 +554,14 @@ const BlueprintApp = (() => {
       renderAlignmentCanvas();
       saveCacheDebounced();
     }
+    if (state.step === 4 && state.craftTool === "move") {
+      e.preventDefault();
+      const delta = -e.deltaY * 0.002;
+      state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
+      state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
+      renderCreationCanvas();
+      saveCacheDebounced();
+    }
   }
 
   // ════════════════════════════════════════
@@ -761,11 +772,19 @@ const BlueprintApp = (() => {
     if (cw <= 0 || ch <= 0) return;
 
     const ctx = setupCanvas(canvas, cw, ch);
-    drawImageAndGrid(ctx, cw, ch);
-    drawPaintedCells(ctx, cw, ch);
+
+    if (state.previewMode) {
+      // 预览模式：白色背景 + 涂色色块（无底图、无网格）
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, cw, ch);
+      drawPaintedCells(ctx, cw, ch);
+    } else {
+      drawImageAndGrid(ctx, cw, ch);
+      drawPaintedCells(ctx, cw, ch);
+    }
   }
 
-  // 绘制已涂色格子（半透明色块 + 浅边）
+  // 绘制已涂色格子（不透明色块 + 边框标记）
   function drawPaintedCells(ctx, cw, ch) {
     const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
     if (cellSize <= 0) return;
@@ -777,18 +796,20 @@ const BlueprintApp = (() => {
       const id = state.gridPaint[key];
       const c = colorMap[id];
       if (!c) continue;
-      const [r, col] = key.split(',').map(Number);
+      const [r, col] = key.split(",").map(Number);
       const x = gx0 + col * cellSize + pad;
       const y = gy0 + r * cellSize + pad;
       const s = cellSize - pad * 2;
+      // 不透明填充
       ctx.fillStyle = c.hex;
-      ctx.globalAlpha = 0.82;
       ctx.fillRect(x, y, s, s);
+      // 深色边框标记已涂色格子
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, s, s);
     }
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
-
   // ════════════════════════════════════════
   //  步骤 4：创作（涂色 / 吸色 / 橡皮）
   // ════════════════════════════════════════
@@ -1053,21 +1074,63 @@ const BlueprintApp = (() => {
     saveCache();
   }
 
+  // 切换预览模式
+  function togglePreview() {
+    state.previewMode = !state.previewMode;
+    updatePreviewButton();
+    renderCreationCanvas();
+    saveCache();
+  }
+
+  function updatePreviewButton() {
+    if (els.previewBtn) {
+      els.previewBtn.classList.toggle("active", state.previewMode);
+    }
+  }
+
   // 步骤 4 触屏（单指：涂色拖拽 / 吸色单击）
   function onCraftTouchStart(e) {
+    // 移动模式双指缩放
+    if (state.craftTool === "move" && e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      craftDrag = {
+        type: "pinch",
+        dist: Math.hypot(dx, dy),
+        imgScale: state.imageScale,
+        gridScale: state.gridScale,
+      };
+      return;
+    }
     if (e.touches.length !== 1) return;
     e.preventDefault();
     const t = e.touches[0];
     onCraftStart(t.clientX, t.clientY);
   }
   function onCraftTouchMove(e) {
+    // 双指缩放
+    if (craftDrag && craftDrag.type === "pinch" && e.touches.length >= 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const nd = Math.hypot(dx, dy);
+      const ratio = nd / craftDrag.dist;
+      state.imageScale = clamp(craftDrag.imgScale * ratio, 0.05, 20);
+      state.gridScale = clamp(craftDrag.gridScale * ratio, 0.05, 20);
+      renderCreationCanvas();
+      return;
+    }
     if (!craftDrag || e.touches.length !== 1) return;
     e.preventDefault();
     const t = e.touches[0];
     onCraftMove(t.clientX, t.clientY);
   }
   function onCraftTouchEnd(e) {
-    if (e.touches.length === 0) onCraftEnd();
+    if (e.touches.length === 0) {
+      if (craftDrag && craftDrag.type === "pinch") saveCache();
+      onCraftEnd();
+    }
   }
 
   // ── 吸色：取格子覆盖图片区域的平均色 → 匹配最近 beadColor ──
@@ -1395,6 +1458,7 @@ const BlueprintApp = (() => {
     });
     els.backToAlign.addEventListener('click', () => setStep(3));
     els.restart2.addEventListener('click', openResetModal);
+    els.previewBtn.addEventListener('click', togglePreview);
 
     // ── 步骤 2：裁剪框事件（mouse + touch） ──
     els.cropRect.addEventListener('mousedown', onFrameMouseDown);
@@ -1442,7 +1506,7 @@ const BlueprintApp = (() => {
       else if (state.step === 4) onCraftStart(e.clientX, e.clientY);
     });
     els.canvas.addEventListener('wheel', (e) => {
-      if (state.step === 3) onCanvasWheel(e);
+      if (state.step === 3 || state.step === 4) onCanvasWheel(e);
     }, { passive: false });
 
     // ── 全局 ──
