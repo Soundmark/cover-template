@@ -551,6 +551,10 @@ const BlueprintApp = (() => {
         const factor = 1 + delta;
         state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
         state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
+        state.imageOffX *= factor;
+        state.imageOffY *= factor;
+        state.gridOffX *= factor;
+        state.gridOffY *= factor;
       }
       renderAlignmentCanvas();
       saveCacheDebounced();
@@ -561,6 +565,10 @@ const BlueprintApp = (() => {
       const factor = 1 + delta;
       state.imageScale = clamp(state.imageScale * factor, 0.05, 20);
       state.gridScale = clamp(state.gridScale * factor, 0.05, 20);
+      state.imageOffX *= factor;
+      state.imageOffY *= factor;
+      state.gridOffX *= factor;
+      state.gridOffY *= factor;
       renderCreationCanvas();
       saveCacheDebounced();
     }
@@ -1120,6 +1128,10 @@ const BlueprintApp = (() => {
       const ratio = nd / craftDrag.dist;
       state.imageScale = clamp(craftDrag.imgScale * ratio, 0.05, 20);
       state.gridScale = clamp(craftDrag.gridScale * ratio, 0.05, 20);
+      state.imageOffX = craftDrag.imgOffX * ratio;
+      state.imageOffY = craftDrag.imgOffY * ratio;
+      state.gridOffX = craftDrag.gridOffX * ratio;
+      state.gridOffY = craftDrag.gridOffY * ratio;
       renderCreationCanvas();
       return;
     }
@@ -1280,6 +1292,10 @@ const BlueprintApp = (() => {
         dist: Math.hypot(dx, dy),
         imgScale: state.imageScale,
         gridScale: state.gridScale,
+        imgOffX: state.imageOffX,
+        imgOffY: state.imageOffY,
+        gridOffX: state.gridOffX,
+        gridOffY: state.gridOffY,
       };
     }
   }
@@ -1317,10 +1333,18 @@ const BlueprintApp = (() => {
       } else {
         state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
         state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
+        state.imageOffX = alignDrag.imgOffX * ratio;
+        state.imageOffY = alignDrag.imgOffY * ratio;
+        state.gridOffX = alignDrag.gridOffX * ratio;
+        state.gridOffY = alignDrag.gridOffY * ratio;
       }
       alignDrag.dist = nd;
       alignDrag.imgScale = state.imageScale;
       alignDrag.gridScale = state.gridScale;
+      alignDrag.imgOffX = state.imageOffX;
+      alignDrag.imgOffY = state.imageOffY;
+      alignDrag.gridOffX = state.gridOffX;
+      alignDrag.gridOffY = state.gridOffY;
       renderAlignmentCanvas();
     }
   }
