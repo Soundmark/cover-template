@@ -180,6 +180,7 @@ const BlueprintApp = (() => {
       backToAlign:      $('bp-back-to-align'),
       restart2:         $('bp-restart2'),
       previewBtn:       $('bp-preview'),
+      exportBtn:        $('bp-export'),
     };
     bindEvents();
 
@@ -757,12 +758,12 @@ const BlueprintApp = (() => {
     return { cellSize, gridPixelW, gridPixelH, gx0, gy0 };
   }
 
-  function drawGrid(ctx, cw, ch) {
+  function drawGrid(ctx, cw, ch, color) {
     const { gridW, gridH } = state;
     const { cellSize, gridPixelW, gridPixelH, gx0, gy0 } = getGridGeometry(cw, ch);
 
     ctx.save();
-    ctx.strokeStyle = '#ff2442';
+    ctx.strokeStyle = color || '#ff2442';
     ctx.lineWidth = 1.5;
 
     for (let i = 0; i <= gridW; i++) {
@@ -801,6 +802,19 @@ const BlueprintApp = (() => {
     } else {
       drawImageAndGrid(ctx, cw, ch);
       drawPaintedCells(ctx, cw, ch);
+      // 只在已涂色格子区域覆盖绿色网格线
+      {
+        const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
+        ctx.save();
+        ctx.beginPath();
+        for (const key in state.gridPaint) {
+          const [r, col] = key.split(",").map(Number);
+          ctx.rect(gx0 + col * cellSize, gy0 + r * cellSize, cellSize, cellSize);
+        }
+        ctx.clip();
+        drawGrid(ctx, cw, ch, '#2ecc40');
+        ctx.restore();
+      }
     }
   }
 
@@ -1100,6 +1114,76 @@ const BlueprintApp = (() => {
     updatePreviewButton();
     renderCreationCanvas();
     saveCache();
+  }
+
+  // 导出涂色结果为 PNG（按涂色区域裁剪，不受视口限制）
+  function exportPNG() {
+    const canvas = els.canvas;
+    if (!canvas || !state.croppedImage) return;
+    if (!state.gridGenerated || state.gridW <= 0 || state.gridH <= 0) return;
+
+    const keys = Object.keys(state.gridPaint);
+    if (!keys.length) { toast('没有已涂色的格子'); return; }
+
+    // 计算涂色格子的包围盒（行列范围）
+    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+    for (const key of keys) {
+      const [r, col] = key.split(',').map(Number);
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (col < minC) minC = col;
+      if (col > maxC) maxC = col;
+    }
+
+    // 用当前视口的 cellSize 作为基准，放大 4 倍提升导出清晰度
+    const { cw, ch } = getWrapperSize();
+    if (cw <= 0 || ch <= 0) return;
+    const { cellSize: baseCell } = getGridGeometry(cw, ch);
+    if (baseCell <= 0) return;
+    const scale = 4;
+    const cellSize = baseCell * scale;
+
+    const pad = Math.max(0, cellSize * 0.04);
+    const cols = maxC - minC + 1;
+    const rows = maxR - minR + 1;
+    const exportW = Math.round(cols * cellSize);
+    const exportH = Math.round(rows * cellSize);
+
+    const tmp = document.createElement('canvas');
+    tmp.width = exportW;
+    tmp.height = exportH;
+    const tctx = tmp.getContext('2d');
+
+    // 白色背景
+    tctx.fillStyle = '#ffffff';
+    tctx.fillRect(0, 0, exportW, exportH);
+
+    // 涂色格子
+    const colorMap = buildColorIdMap();
+    for (const key of keys) {
+      const id = state.gridPaint[key];
+      const c = colorMap[id];
+      if (!c) continue;
+      const [r, col] = key.split(',').map(Number);
+      const x = (col - minC) * cellSize + pad;
+      const y = (r - minR) * cellSize + pad;
+      const s = cellSize - pad * 2;
+      tctx.fillStyle = c.hex;
+      tctx.fillRect(x, y, s, s);
+    }
+
+    tmp.toBlob((blob) => {
+      if (!blob) { toast('导出失败'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'craft-' + new Date().toISOString().slice(0, 10) + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('导出成功');
+    }, 'image/png');
   }
 
   function updatePreviewButton() {
@@ -1509,6 +1593,7 @@ const BlueprintApp = (() => {
     els.backToAlign.addEventListener('click', () => setStep(3));
     els.restart2.addEventListener('click', openResetModal);
     els.previewBtn.addEventListener('click', togglePreview);
+    els.exportBtn.addEventListener('click', exportPNG);
 
     // ── 步骤 2：裁剪框事件（mouse + touch） ──
     els.cropRect.addEventListener('mousedown', onFrameMouseDown);
