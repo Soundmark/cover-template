@@ -837,7 +837,8 @@ body {
 }
 
 /* 预览按钮激活态 */
-#bp-preview.active {
+#bp-preview.active,
+#bp-original.active {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);

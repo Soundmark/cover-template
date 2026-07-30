@@ -36,6 +36,7 @@ const BlueprintApp = (() => {
     craftTool: 'paint',         // 'paint' | 'pick' | 'erase'
     activeColorId: 'A01',
     previewMode: false,
+    showOriginal: false,
   };
 
   // 裁剪框拖拽（handle resize + frame move）
@@ -82,6 +83,14 @@ const BlueprintApp = (() => {
   }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  // 焦点缩放辅助：保持 canvas 坐标 (focalX, focalY) 在缩放前后不变
+  function zoomAt(ratio, focalX, focalY, cw, ch, offX, offY) {
+    return {
+      offX: offX * ratio + (focalX - cw / 2) * (1 - ratio),
+      offY: offY * ratio + (focalY - ch / 2) * (1 - ratio),
+    };
+  }
 
   // 可靠地获取 wrapper 实际像素尺寸（使用 getBoundingClientRect）
   function getWrapperSize() {
@@ -181,6 +190,7 @@ const BlueprintApp = (() => {
       restart2:         $('bp-restart2'),
       previewBtn:       $('bp-preview'),
       exportBtn:        $('bp-export'),
+      originalBtn:      $('bp-original'),
     };
     bindEvents();
 
@@ -258,10 +268,12 @@ const BlueprintApp = (() => {
       els.startCraft.hidden = !state.gridGenerated;
       requestAnimationFrame(() => renderAlignmentCanvas());
     } else if (step === 4 && state.croppedImage) {
+      state.showOriginal = false;
       ensurePaletteBuilt();
       updateCraftToolButtons();
       updateCurrentColorDisplay();
       updatePreviewButton();
+      updateOriginalButton();
       requestAnimationFrame(() => renderCreationCanvas());
     }
 
@@ -424,10 +436,17 @@ const BlueprintApp = (() => {
     } else if (t.length === 2) {
       const dx = t[0].clientX - t[1].clientX;
       const dy = t[0].clientY - t[1].clientY;
+      const midX = (t[0].clientX + t[1].clientX) / 2;
+      const midY = (t[0].clientY + t[1].clientY) / 2;
+      const wr = els.canvasWrapper.getBoundingClientRect();
       imgTouch = {
         type: 'zoom',
         dist: Math.hypot(dx, dy),
         zoom: state.imgZoom,
+        panX: state.imgPanX,
+        panY: state.imgPanY,
+        focalX: midX - wr.left,
+        focalY: midY - wr.top,
       };
     }
   }
@@ -450,7 +469,12 @@ const BlueprintApp = (() => {
       const dx = t[0].clientX - t[1].clientX;
       const dy = t[0].clientY - t[1].clientY;
       const nd = Math.hypot(dx, dy);
-      state.imgZoom = clamp(imgTouch.zoom * (nd / imgTouch.dist), 0.05, 20);
+      const ratio = nd / imgTouch.dist;
+      state.imgZoom = clamp(imgTouch.zoom * ratio, 0.05, 20);
+      const { cw, ch } = getWrapperSize();
+      const z = zoomAt(ratio, imgTouch.focalX, imgTouch.focalY, cw, ch, imgTouch.panX, imgTouch.panY);
+      state.imgPanX = z.offX;
+      state.imgPanY = z.offY;
       renderCanvas();
     }
   }
@@ -535,51 +559,71 @@ const BlueprintApp = (() => {
   function onCanvasWheel(e) {
     if (state.step === 2 && state.originalImage) {
       e.preventDefault();
+      const wr = els.canvasWrapper.getBoundingClientRect();
+      const focalX = e.clientX - wr.left;
+      const focalY = e.clientY - wr.top;
       const delta = -e.deltaY * 0.002;
-      state.imgZoom = clamp(state.imgZoom + delta, 0.05, 20);
+      const ratio = 1 + delta;
+      state.imgZoom = clamp(state.imgZoom * ratio, 0.05, 20);
+      const { cw, ch } = getWrapperSize();
+      const z = zoomAt(ratio, focalX, focalY, cw, ch, state.imgPanX, state.imgPanY);
+      state.imgPanX = z.offX;
+      state.imgPanY = z.offY;
       renderCanvas();
       saveCacheDebounced();
       return;
     }
     if (state.step === 3 && state.croppedImage) {
       e.preventDefault();
+      const wr = els.canvasWrapper.getBoundingClientRect();
+      const focalX = e.clientX - wr.left;
+      const focalY = e.clientY - wr.top;
       const delta = -e.deltaY * 0.002;
+      const { cw, ch } = getWrapperSize();
       if (state.currentMode === 'image') {
-        state.imageScale = clamp(state.imageScale + delta, 0.05, 20);
+        const ratio = 1 + delta;
+        state.imageScale = clamp(state.imageScale * ratio, 0.05, 20);
+        const z = zoomAt(ratio, focalX, focalY, cw, ch, state.imageOffX, state.imageOffY);
+        state.imageOffX = z.offX;
+        state.imageOffY = z.offY;
       } else if (state.currentMode === 'grid') {
-        state.gridScale = clamp(state.gridScale + delta, 0.05, 20);
+        const ratio = 1 + delta;
+        state.gridScale = clamp(state.gridScale * ratio, 0.05, 20);
+        const z = zoomAt(ratio, focalX, focalY, cw, ch, state.gridOffX, state.gridOffY);
+        state.gridOffX = z.offX;
+        state.gridOffY = z.offY;
       } else {
-        const factor = 1 + delta;
-        const newImgS = clamp(state.imageScale * factor, 0.05, 200);
-        const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+        const ratio = 1 + delta;
+        const newImgS = clamp(state.imageScale * ratio, 0.05, 200);
+        const newGrdS = clamp(state.gridScale * ratio, 0.05, 200);
         const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
         state.imageScale = clamp(state.imageScale * f, 0.05, 200);
         state.gridScale = clamp(state.gridScale * f, 0.05, 200);
-        const midX = (state.imageOffX + state.gridOffX) / 2;
-        const midY = (state.imageOffY + state.gridOffY) / 2;
-        state.imageOffX = midX + (state.imageOffX - midX) * f;
-        state.imageOffY = midY + (state.imageOffY - midY) * f;
-        state.gridOffX = midX + (state.gridOffX - midX) * f;
-        state.gridOffY = midY + (state.gridOffY - midY) * f;
+        const zi = zoomAt(f, focalX, focalY, cw, ch, state.imageOffX, state.imageOffY);
+        const zg = zoomAt(f, focalX, focalY, cw, ch, state.gridOffX, state.gridOffY);
+        state.imageOffX = zi.offX; state.imageOffY = zi.offY;
+        state.gridOffX = zg.offX; state.gridOffY = zg.offY;
       }
       renderAlignmentCanvas();
       saveCacheDebounced();
     }
     if (state.step === 4 && state.craftTool === "move") {
       e.preventDefault();
+      const wr = els.canvasWrapper.getBoundingClientRect();
+      const focalX = e.clientX - wr.left;
+      const focalY = e.clientY - wr.top;
       const delta = -e.deltaY * 0.002;
-      const factor = 1 + delta;
-      const newImgS = clamp(state.imageScale * factor, 0.05, 200);
-      const newGrdS = clamp(state.gridScale * factor, 0.05, 200);
+      const ratio = 1 + delta;
+      const newImgS = clamp(state.imageScale * ratio, 0.05, 200);
+      const newGrdS = clamp(state.gridScale * ratio, 0.05, 200);
       const f = Math.min(newImgS / state.imageScale, newGrdS / state.gridScale);
       state.imageScale = clamp(state.imageScale * f, 0.05, 200);
       state.gridScale = clamp(state.gridScale * f, 0.05, 200);
-      const midX = (state.imageOffX + state.gridOffX) / 2;
-      const midY = (state.imageOffY + state.gridOffY) / 2;
-      state.imageOffX = midX + (state.imageOffX - midX) * f;
-      state.imageOffY = midY + (state.imageOffY - midY) * f;
-      state.gridOffX = midX + (state.gridOffX - midX) * f;
-      state.gridOffY = midY + (state.gridOffY - midY) * f;
+      const { cw, ch } = getWrapperSize();
+      const zi = zoomAt(f, focalX, focalY, cw, ch, state.imageOffX, state.imageOffY);
+      const zg = zoomAt(f, focalX, focalY, cw, ch, state.gridOffX, state.gridOffY);
+      state.imageOffX = zi.offX; state.imageOffY = zi.offY;
+      state.gridOffX = zg.offX; state.gridOffY = zg.offY;
       renderCreationCanvas();
       saveCacheDebounced();
     }
@@ -799,6 +843,9 @@ const BlueprintApp = (() => {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, cw, ch);
       drawPaintedCells(ctx, cw, ch);
+    } else if (state.showOriginal) {
+      // 原图模式：只显示图纸，不显示涂色
+      drawImageAndGrid(ctx, cw, ch);
     } else {
       drawImageAndGrid(ctx, cw, ch);
       drawPaintedCells(ctx, cw, ch);
@@ -1111,7 +1158,19 @@ const BlueprintApp = (() => {
   // 切换预览模式
   function togglePreview() {
     state.previewMode = !state.previewMode;
+    if (state.previewMode) state.showOriginal = false;
     updatePreviewButton();
+    updateOriginalButton();
+    renderCreationCanvas();
+    saveCache();
+  }
+
+  // 切换原图模式
+  function toggleOriginal() {
+    state.showOriginal = !state.showOriginal;
+    if (state.showOriginal) state.previewMode = false;
+    updatePreviewButton();
+    updateOriginalButton();
     renderCreationCanvas();
     saveCache();
   }
@@ -1192,6 +1251,12 @@ const BlueprintApp = (() => {
     }
   }
 
+  function updateOriginalButton() {
+    if (els.originalBtn) {
+      els.originalBtn.classList.toggle("active", state.showOriginal);
+    }
+  }
+
   // 步骤 4 触屏（单指：涂色拖拽 / 吸色单击）
   function onCraftTouchStart(e) {
     // 移动模式双指缩放
@@ -1199,6 +1264,9 @@ const BlueprintApp = (() => {
       e.preventDefault();
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const wr = els.canvasWrapper.getBoundingClientRect();
       craftDrag = {
         type: "pinch",
         dist: Math.hypot(dx, dy),
@@ -1208,6 +1276,8 @@ const BlueprintApp = (() => {
         imgOffY: state.imageOffY,
         gridOffX: state.gridOffX,
         gridOffY: state.gridOffY,
+        focalX: midX - wr.left,
+        focalY: midY - wr.top,
       };
       return;
     }
@@ -1229,12 +1299,11 @@ const BlueprintApp = (() => {
       const r = Math.min(newImgS3 / craftDrag.imgScale, newGrdS3 / craftDrag.gridScale);
       state.imageScale = clamp(craftDrag.imgScale * r, 0.05, 200);
       state.gridScale = clamp(craftDrag.gridScale * r, 0.05, 200);
-      const midX = (craftDrag.imgOffX + craftDrag.gridOffX) / 2;
-      const midY = (craftDrag.imgOffY + craftDrag.gridOffY) / 2;
-      state.imageOffX = midX + (craftDrag.imgOffX - midX) * r;
-      state.imageOffY = midY + (craftDrag.imgOffY - midY) * r;
-      state.gridOffX = midX + (craftDrag.gridOffX - midX) * r;
-      state.gridOffY = midY + (craftDrag.gridOffY - midY) * r;
+      const { cw, ch } = getWrapperSize();
+      const zi = zoomAt(r, craftDrag.focalX, craftDrag.focalY, cw, ch, craftDrag.imgOffX, craftDrag.imgOffY);
+      const zg = zoomAt(r, craftDrag.focalX, craftDrag.focalY, cw, ch, craftDrag.gridOffX, craftDrag.gridOffY);
+      state.imageOffX = zi.offX; state.imageOffY = zi.offY;
+      state.gridOffX = zg.offX; state.gridOffY = zg.offY;
       renderCreationCanvas();
       return;
     }
@@ -1269,12 +1338,13 @@ const BlueprintApp = (() => {
     const icy = ch / 2 + state.imageOffY;
     const imgPxX = (ccx - icx) / state.imageScale + img.width / 2;
     const imgPxY = (ccy - icy) / state.imageScale + img.height / 2;
-    // 采样区域 = 一个格子在图片像素里的尺寸
+    // 采样区域 = 格子中心 1/2 范围在图片像素里的尺寸
     const cellImg = cellSize / state.imageScale;
-    const sx = Math.max(0, Math.round(imgPxX - cellImg / 2));
-    const sy = Math.max(0, Math.round(imgPxY - cellImg / 2));
-    const ex = Math.min(img.width, Math.round(imgPxX + cellImg / 2));
-    const ey = Math.min(img.height, Math.round(imgPxY + cellImg / 2));
+    const halfSample = cellImg / 4;
+    const sx = Math.max(0, Math.round(imgPxX - halfSample));
+    const sy = Math.max(0, Math.round(imgPxY - halfSample));
+    const ex = Math.min(img.width, Math.round(imgPxX + halfSample));
+    const ey = Math.min(img.height, Math.round(imgPxY + halfSample));
     if (ex - sx < 1 || ey - sy < 1) {
       toast('该格子不在图片范围内');
       return;
@@ -1390,6 +1460,9 @@ const BlueprintApp = (() => {
     } else if (t.length === 2) {
       const dx = t[0].clientX - t[1].clientX;
       const dy = t[0].clientY - t[1].clientY;
+      const midX = (t[0].clientX + t[1].clientX) / 2;
+      const midY = (t[0].clientY + t[1].clientY) / 2;
+      const wr = els.canvasWrapper.getBoundingClientRect();
       alignDrag = {
         type: 'pinch',
         dist: Math.hypot(dx, dy),
@@ -1399,6 +1472,8 @@ const BlueprintApp = (() => {
         imgOffY: state.imageOffY,
         gridOffX: state.gridOffX,
         gridOffY: state.gridOffY,
+        focalX: midX - wr.left,
+        focalY: midY - wr.top,
       };
     }
   }
@@ -1429,22 +1504,25 @@ const BlueprintApp = (() => {
       const dy = t[0].clientY - t[1].clientY;
       const nd = Math.hypot(dx, dy);
       const ratio = nd / alignDrag.dist;
+      const { cw, ch } = getWrapperSize();
       if (state.currentMode === 'image') {
         state.imageScale = clamp(alignDrag.imgScale * ratio, 0.05, 20);
+        const z = zoomAt(ratio, alignDrag.focalX, alignDrag.focalY, cw, ch, alignDrag.imgOffX, alignDrag.imgOffY);
+        state.imageOffX = z.offX; state.imageOffY = z.offY;
       } else if (state.currentMode === 'grid') {
         state.gridScale = clamp(alignDrag.gridScale * ratio, 0.05, 20);
+        const z = zoomAt(ratio, alignDrag.focalX, alignDrag.focalY, cw, ch, alignDrag.gridOffX, alignDrag.gridOffY);
+        state.gridOffX = z.offX; state.gridOffY = z.offY;
       } else {
         const newImgS2 = clamp(alignDrag.imgScale * ratio, 0.05, 200);
         const newGrdS2 = clamp(alignDrag.gridScale * ratio, 0.05, 200);
         const r = Math.min(newImgS2 / alignDrag.imgScale, newGrdS2 / alignDrag.gridScale);
         state.imageScale = clamp(alignDrag.imgScale * r, 0.05, 200);
         state.gridScale = clamp(alignDrag.gridScale * r, 0.05, 200);
-        const midX = (alignDrag.imgOffX + alignDrag.gridOffX) / 2;
-        const midY = (alignDrag.imgOffY + alignDrag.gridOffY) / 2;
-        state.imageOffX = midX + (alignDrag.imgOffX - midX) * r;
-        state.imageOffY = midY + (alignDrag.imgOffY - midY) * r;
-        state.gridOffX = midX + (alignDrag.gridOffX - midX) * r;
-        state.gridOffY = midY + (alignDrag.gridOffY - midY) * r;
+        const zi = zoomAt(r, alignDrag.focalX, alignDrag.focalY, cw, ch, alignDrag.imgOffX, alignDrag.imgOffY);
+        const zg = zoomAt(r, alignDrag.focalX, alignDrag.focalY, cw, ch, alignDrag.gridOffX, alignDrag.gridOffY);
+        state.imageOffX = zi.offX; state.imageOffY = zi.offY;
+        state.gridOffX = zg.offX; state.gridOffY = zg.offY;
       }
       alignDrag.dist = nd;
       alignDrag.imgScale = state.imageScale;
@@ -1593,6 +1671,7 @@ const BlueprintApp = (() => {
     els.backToAlign.addEventListener('click', () => setStep(3));
     els.restart2.addEventListener('click', openResetModal);
     els.previewBtn.addEventListener('click', togglePreview);
+    els.originalBtn.addEventListener('click', toggleOriginal);
     els.exportBtn.addEventListener('click', exportPNG);
 
     // ── 步骤 2：裁剪框事件（mouse + touch） ──
