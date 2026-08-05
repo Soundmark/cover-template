@@ -1319,44 +1319,32 @@ const BlueprintApp = (() => {
     }
   }
 
-  // ── 吸色：取格子覆盖图片区域的平均色 → 匹配最近 beadColor ──
+  // ── 吸色：取点击位置精确像素颜色 → 匹配最近 beadColor ──
   function pickCellAt(clientX, clientY) {
-    const hit = pointerCellHit(clientX, clientY);
-    if (!hit) return;
     const img = state.croppedImage;
     if (!img) return;
     const sample = ensureImageSampleCanvas();
     if (!sample) return;
 
+    const rect = els.canvasWrapper.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     const { cw, ch } = getWrapperSize();
-    const { cellSize, gx0, gy0 } = getGridGeometry(cw, ch);
-    // 格子中心 canvas 坐标
-    const ccx = gx0 + (hit.col + 0.5) * cellSize;
-    const ccy = gy0 + (hit.row + 0.5) * cellSize;
-    // 反算图片像素坐标（与 drawImageAndGrid 的正向变换互逆）
+
+    // 直接反算点击位置在图片上的像素坐标
     const icx = cw / 2 + state.imageOffX;
     const icy = ch / 2 + state.imageOffY;
-    const imgPxX = (ccx - icx) / state.imageScale + img.width / 2;
-    const imgPxY = (ccy - icy) / state.imageScale + img.height / 2;
-    // 采样区域 = 格子中心 1/2 范围在图片像素里的尺寸
-    const cellImg = cellSize / state.imageScale;
-    const halfSample = cellImg / 4;
-    const sx = Math.max(0, Math.round(imgPxX - halfSample));
-    const sy = Math.max(0, Math.round(imgPxY - halfSample));
-    const ex = Math.min(img.width, Math.round(imgPxX + halfSample));
-    const ey = Math.min(img.height, Math.round(imgPxY + halfSample));
-    if (ex - sx < 1 || ey - sy < 1) {
-      toast('该格子不在图片范围内');
+    const imgPxX = Math.round((x - icx) / state.imageScale + img.width / 2);
+    const imgPxY = Math.round((y - icy) / state.imageScale + img.height / 2);
+
+    // 边界检查
+    if (imgPxX < 0 || imgPxX >= img.width || imgPxY < 0 || imgPxY >= img.height) {
+      toast('该位置不在图片范围内');
       return;
     }
 
-    const data = sample.getContext('2d').getImageData(sx, sy, ex - sx, ey - sy).data;
-    let r = 0, g = 0, b = 0, n = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
-    }
-    if (n === 0) { toast('该格子不在图片范围内'); return; }
-    const best = findClosestBeadColor(Math.round(r / n), Math.round(g / n), Math.round(b / n));
+    const data = sample.getContext('2d').getImageData(imgPxX, imgPxY, 1, 1).data;
+    const best = findClosestBeadColor(data[0], data[1], data[2]);
     if (best) {
       state.activeColorId = best.id;
       updateCurrentColorDisplay();
